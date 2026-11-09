@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "25"
       - name: Configure Android SDK
         run: |
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
@@ -30,7 +30,7 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
       - name: Install Android platform
-        run: sdkmanager "platforms;android-37"
+        run: sdkmanager "platforms;android-36"
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest
       - name: Build debug APK
