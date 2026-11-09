@@ -1,3 +1,18 @@
+## 手机 Web 前端（当前可运行入口）
+
+新增 [`web/`](web/)：HTML / CSS / JavaScript 模块化前端，保留已确认的手机界面、三套主题、自动处理、五项实时调节、图片右下角对比工具、本地记录与导出。
+
+```bash
+cd web
+npm run dev
+```
+
+无需安装 npm 依赖。测试、构建、实际算法范围和真机验收说明见 [`web/README.md`](web/README.md)。本次未发布在线托管；CLAHE、同态和运动模糊反卷积仍未接入该 Web 前端。
+
+以下保留仓库原有 Android 工程说明，它与 `web/` 分别运行。
+
+---
+
 <div align="center">
 
 # 🌙 NightVision-DIP · 夜视大师
@@ -181,3 +196,4 @@ macOS / Linux：
 ---
 
 <div align="center"><sub>NightVision-DIP · Build it. Measure it. Understand it.</sub></div>
+
