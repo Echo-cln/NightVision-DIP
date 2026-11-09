@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
                 var busy by remember { mutableStateOf(false) }
                 var history by remember { mutableStateOf(HistoryStore.list(this@MainActivity)) }
                 var assets by remember { mutableStateOf(ImageLibraryStore.list(this@MainActivity)) }
+                var currentAssetPath by remember { mutableStateOf<String?>(null) }
                 var autoProcessOnImport by remember { mutableStateOf(getSharedPreferences("nightvision_settings", MODE_PRIVATE).getBoolean("autoProcessOnImport", true)) }
                 var exportQuality by remember { mutableStateOf(getSharedPreferences("nightvision_settings", MODE_PRIVATE).getInt("exportQuality", 94)) }
                 var theme by remember {
@@ -85,6 +86,7 @@ class MainActivity : ComponentActivity() {
                                 ImageLibraryStore.save(this@MainActivity, "夜景照片", sourceType, image, uri)
                             }
                             assets = listOf(asset) + assets.filterNot { it.id == asset.id }
+                            currentAssetPath = asset.imagePath
                             source = image
                             params = if (autoProcessOnImport) ProcessParameters() else ProcessParameters(auto = false)
                             if (autoProcessOnImport) {
@@ -255,7 +257,8 @@ class MainActivity : ComponentActivity() {
                                             original,
                                             processed,
                                             "本次参数已结构化保存",
-                                            encodeProcessParameters(params)
+                                            encodeProcessParameters(params),
+                                            currentAssetPath
                                         )
                                     }
                                     history = listOf(saved) + history.filterNot { it.id == saved.id }
@@ -294,6 +297,7 @@ class MainActivity : ComponentActivity() {
                             try {
                                 val image = withContext(Dispatchers.IO) { ImageLibraryStore.load(asset) }
                                 if (image != null) {
+                                    currentAssetPath = asset.imagePath
                                     source = image
                                     mode = ProcessingMode.ENHANCE
                                     params = ProcessParameters()
@@ -333,6 +337,7 @@ class MainActivity : ComponentActivity() {
                             try {
                                 val pair = withContext(Dispatchers.IO) { HistoryStore.load(item) }
                                 if (pair != null) {
+                                    currentAssetPath = item.originalPath
                                     source = pair.first
                                     result = pair.second
                                     mode = if (item.mode == ProcessingMode.RESTORE.name) ProcessingMode.RESTORE else ProcessingMode.ENHANCE
