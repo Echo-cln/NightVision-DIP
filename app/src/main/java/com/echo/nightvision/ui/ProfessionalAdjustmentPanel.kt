@@ -86,7 +86,7 @@ fun ProfessionalAdjustmentPanel(
                                 whiteBalance = false, hslAdjustments = List(8) { HslAdjustment() }
                             )
                             AdjustmentGroup.DETAIL -> parameters.copy(
-                                clarity = 0f, texture = 0f, sharpening = 0f, denoise = 0f, colorDenoise = 0f
+                                clarity = 0f, texture = 0f, sharpening = 0f, sharpenRadius = 1f, sharpenDetail = 50f, sharpenMasking = 0f, denoise = 0f, denoiseDetail = 50f, colorDenoise = 0f
                             )
                             AdjustmentGroup.EFFECTS -> parameters.copy(vignette = 0f)
                             AdjustmentGroup.ALGORITHM -> parameters.copy(toneMethod = ToneMethod.GAMMA)
@@ -214,10 +214,22 @@ fun ProfessionalAdjustmentPanel(
                     AdjustmentSlider("锐化强度", parameters.sharpening, 0f..150f, "%", accent) {
                         update(parameters.copy(sharpening = it))
                     }
+                    AdjustmentSlider("锐化半径", parameters.sharpenRadius, 1f..3f, " px", accent) {
+                        update(parameters.copy(sharpenRadius = it))
+                    }
+                    AdjustmentSlider("锐化细节", parameters.sharpenDetail, 0f..100f, "%", accent) {
+                        update(parameters.copy(sharpenDetail = it))
+                    }
+                    AdjustmentSlider("锐化蒙版", parameters.sharpenMasking, 0f..100f, "%", accent) {
+                        update(parameters.copy(sharpenMasking = it))
+                    }
                     HorizontalDivider(color = Color(0xFFE8EEEA))
                     Text("噪声抑制", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     AdjustmentSlider("明度降噪", parameters.denoise, 0f..100f, "%", accent) {
                         update(parameters.copy(denoise = it))
+                    }
+                    AdjustmentSlider("细节保留", parameters.denoiseDetail, 0f..100f, "%", accent) {
+                        update(parameters.copy(denoiseDetail = it))
                     }
                     AdjustmentSlider("色彩降噪", parameters.colorDenoise, 0f..100f, "%", accent) {
                         update(parameters.copy(colorDenoise = it))
