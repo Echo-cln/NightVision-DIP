@@ -6,13 +6,13 @@ plugins {
 android {
     namespace = "com.echo.nightvision"
     compileSdk {
-        version = release(37)
+        version = release(36)
     }
 
     defaultConfig {
         applicationId = "com.echo.nightvision"
         minSdk = 29
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
