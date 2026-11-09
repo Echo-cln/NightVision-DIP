@@ -48,12 +48,18 @@ object HistoryStore {
         val id = UUID.randomUUID().toString()
         val originalFile = File(folder, id + "-original.jpg")
         val resultFile = File(folder, id + "-result.jpg")
-        if (originalFilePath != null && File(originalFilePath).exists()) {
-            File(originalFilePath).copyTo(originalFile, overwrite = true)
-        } else {
-            write(original, originalFile)
+        try {
+            if (originalFilePath != null && File(originalFilePath).exists()) {
+                File(originalFilePath).copyTo(originalFile, overwrite = true)
+            } else {
+                write(original, originalFile)
+            }
+            write(result, resultFile)
+        } catch (error: Exception) {
+            originalFile.delete()
+            resultFile.delete()
+            throw error
         }
-        write(result, resultFile)
         val item = HistoryItem(id, title, mode, System.currentTimeMillis(), originalFile.absolutePath, resultFile.absolutePath, summary, parametersJson)
         val previous = list(context)
         val retained = (listOf(item) + previous).take(LIMIT)
@@ -94,15 +100,22 @@ object HistoryStore {
     }
 
     private fun pixels(bitmap: Bitmap): PixelImage {
-        val data = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(data, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        return PixelImage(bitmap.width, bitmap.height, data)
+        return try {
+            val data = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(data, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            PixelImage(bitmap.width, bitmap.height, data)
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     private fun write(image: PixelImage, file: File) {
         val bitmap = Bitmap.createBitmap(image.pixels, image.width, image.height, Bitmap.Config.ARGB_8888)
-        file.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it)) { "处理记录写入失败" } }
-        bitmap.recycle()
+        try {
+            file.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it)) { "处理记录写入失败" } }
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     private fun removeFiles(item: HistoryItem) {
