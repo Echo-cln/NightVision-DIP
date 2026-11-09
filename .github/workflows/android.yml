@@ -32,9 +32,9 @@ jobs:
       - name: Install Android platform
         run: sdkmanager "platforms;android-36"
       - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest
+        run: bash ./gradlew :app:testDebugUnitTest
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug
+        run: bash ./gradlew :app:assembleDebug
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
