@@ -275,7 +275,7 @@ class MainActivity : ComponentActivity() {
                             scope.launch {
                                 try {
                                     withContext(Dispatchers.IO) {
-                                        saveImageToGallery(image)
+                                        saveImageToGallery(image, exportQuality)
                                         ImageLibraryStore.save(this@MainActivity, "夜景处理结果", "处理结果", image)
                                     }
                                     assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
