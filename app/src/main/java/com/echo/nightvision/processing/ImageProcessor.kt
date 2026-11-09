@@ -463,11 +463,14 @@ object ImageProcessor {
 
     private fun applyCurve(value: Double, points: List<Float>): Double {
         if (points.size != 5) return value.coerceIn(0.0, 255.0)
-        val position = value.coerceIn(0.0, 255.0) / 255.0 * 4.0
-        val left = position.toInt().coerceIn(0, 3)
-        val fraction = position - left
-        val a = points[left].coerceIn(0f, 255f).toDouble()
-        val b = points[left + 1].coerceIn(0f, 255f).toDouble()
+        val x = value.coerceIn(0.0, 255.0)
+        val inputAnchors = doubleArrayOf(0.0, 64.0, 128.0, 192.0, 255.0)
+        var segment = 0
+        while (segment < 3 && x > inputAnchors[segment + 1]) segment++
+        val fraction = ((x - inputAnchors[segment]) /
+            (inputAnchors[segment + 1] - inputAnchors[segment])).coerceIn(0.0, 1.0)
+        val a = points[segment].coerceIn(0f, 255f).toDouble()
+        val b = points[segment + 1].coerceIn(0f, 255f).toDouble()
         return (a + (b - a) * fraction).coerceIn(0.0, 255.0)
     }
 
