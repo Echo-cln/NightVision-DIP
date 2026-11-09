@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,7 +76,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val photoPicker = rememberLauncherForActivityResult(
-                    ActivityResultContracts.GetContent()
+                    ActivityResultContracts.PickVisualMedia()
                 ) { uri -> if (uri != null) loadImage(uri) }
 
                 val cameraCapture = rememberLauncherForActivityResult(
@@ -121,7 +122,7 @@ class MainActivity : ComponentActivity() {
                         result = null
                         report = null
                     },
-                    onPick = { photoPicker.launch("image/*") },
+                    onPick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     onCamera = {
                         val uri = createCameraUri()
                         cameraUri = uri
