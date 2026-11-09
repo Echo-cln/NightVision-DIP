@@ -112,24 +112,25 @@ fun CameraScreen(
                             put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/NightVision/Captures")
                             put(MediaStore.Images.Media.IS_PENDING, 1)
                         }
-                        destination = context.contentResolver.insert(
+                        val savedUri = context.contentResolver.insert(
                             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                             values
                         ) ?: error("系统相册不可用，无法创建拍摄文件。")
-                        val output = context.contentResolver.openOutputStream(destination, "w")
+                        destination = savedUri
+                        val output = context.contentResolver.openOutputStream(savedUri, "w")
                             ?: error("无法打开照片保存流。")
                         output.use { stream ->
                             file.inputStream().use { input -> input.copyTo(stream) }
                         }
                         context.contentResolver.update(
-                            destination,
+                            savedUri,
                             ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
                             null,
                             null
                         )
                         file.delete()
                         capturing = false
-                        onPhotoCaptured(destination)
+                        onPhotoCaptured(savedUri)
                     } catch (error: Exception) {
                         destination?.let { context.contentResolver.delete(it, null, null) }
                         file.delete()
