@@ -206,6 +206,7 @@ class MainActivity : ComponentActivity() {
                             previewVersion += 1
                             val version = previewVersion
                             previewJob?.cancel()
+                            busy = true
                             previewJob = scope.launch {
                                 try {
                                     delay(90)
@@ -231,6 +232,8 @@ class MainActivity : ComponentActivity() {
                                     // A newer slider value superseded this preview.
                                 } catch (error: Exception) {
                                     if (version == previewVersion) message = error.message ?: "实时预览失败。"
+                                } finally {
+                                    if (version == previewVersion) busy = false
                                 }
                             }
                         }
