@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -296,12 +297,9 @@ private fun EditorScreen(
                 Text("处理预览", color = Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 Text(source.width.toString() + " × " + source.height, color = Muted, fontSize = 11.sp)
             }
-            ImageComparison(source, result, if (result == null) ImageViewMode.ORIGINAL else viewMode, split, onSplit)
+            ImageComparison(source, result, if (result == null) ImageViewMode.ORIGINAL else viewMode, split, onSplit, onViewMode)
             if (result != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ViewChip("效果", viewMode == ImageViewMode.RESULT) { onViewMode(ImageViewMode.RESULT) }
-                    ViewChip("原图", viewMode == ImageViewMode.ORIGINAL) { onViewMode(ImageViewMode.ORIGINAL) }
-                    ViewChip("拖动对比", viewMode == ImageViewMode.COMPARE) { onViewMode(ImageViewMode.COMPARE) }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onSaveRecord) { Text("保存记录", color = accent, fontSize = 12.sp) }
                     TextButton(onClick = onSave) { Text("导出图片", color = accent, fontSize = 12.sp) }
@@ -362,53 +360,115 @@ private fun EditorScreen(
 }
 
 @Composable
-private fun ImageComparison(source: PixelImage, result: PixelImage?, mode: ImageViewMode, split: Float, onSplit: (Float) -> Unit) {
-    val originalBitmap = remember(source) { Bitmap.createBitmap(source.pixels, source.width, source.height, Bitmap.Config.ARGB_8888).asImageBitmap() }
-    val resultBitmap = remember(result) { result?.let { Bitmap.createBitmap(it.pixels, it.width, it.height, Bitmap.Config.ARGB_8888).asImageBitmap() } }
+private fun ImageComparison(
+    source: PixelImage,
+    result: PixelImage?,
+    mode: ImageViewMode,
+    split: Float,
+    onSplit: (Float) -> Unit,
+    onViewMode: (ImageViewMode) -> Unit
+) {
+    val originalBitmap = remember(source) {
+        Bitmap.createBitmap(source.pixels, source.width, source.height, Bitmap.Config.ARGB_8888).asImageBitmap()
+    }
+    val resultBitmap = remember(result) {
+        result?.let { Bitmap.createBitmap(it.pixels, it.width, it.height, Bitmap.Config.ARGB_8888).asImageBitmap() }
+    }
     val latestOnSplit = rememberUpdatedState(onSplit)
+    val latestOnViewMode = rememberUpdatedState(onViewMode)
     Surface(color = Color(0xFF172522), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().height(265.dp)) {
-        when (mode) {
-            ImageViewMode.ORIGINAL -> Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
-            ImageViewMode.RESULT -> if (resultBitmap != null) Image(resultBitmap, "处理结果", modifier = Modifier.fillMaxSize()) else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
-            ImageViewMode.COMPARE -> if (resultBitmap != null) {
-                Canvas(Modifier.fillMaxSize().pointerInput(source.width, source.height) {
-                    detectDragGestures { change, _ ->
-                        change.consume()
-                        val canvasWidth = size.width.toFloat()
-                        val canvasHeight = size.height.toFloat()
-                        if (canvasWidth > 0f && canvasHeight > 0f) {
-                            val imageAspect = source.width.toFloat() / source.height
-                            val canvasAspect = canvasWidth / canvasHeight
-                            val displayedWidth = if (imageAspect > canvasAspect) {
-                                canvasWidth
-                            } else {
-                                canvasHeight * imageAspect
+        Box(Modifier.fillMaxSize()) {
+            when (mode) {
+                ImageViewMode.ORIGINAL -> Image(
+                    originalBitmap,
+                    "原图",
+                    modifier = Modifier.fillMaxSize().pointerInput(mode, resultBitmap) {
+                        detectTapGestures(onPress = {
+                            if (resultBitmap != null && mode == ImageViewMode.RESULT) {
+                                latestOnViewMode.value(ImageViewMode.ORIGINAL)
+                                tryAwaitRelease()
+                                latestOnViewMode.value(ImageViewMode.RESULT)
                             }
-                            val imageLeft = (canvasWidth - displayedWidth) / 2f
-                            if (displayedWidth > 0f) {
-                                latestOnSplit.value(
-                                    ((change.position.x - imageLeft) / displayedWidth).coerceIn(0.05f, 0.95f)
-                                )
+                        })
+                    }
+                )
+                ImageViewMode.RESULT -> if (resultBitmap != null) {
+                    Image(
+                        resultBitmap,
+                        "处理结果",
+                        modifier = Modifier.fillMaxSize().pointerInput(resultBitmap) {
+                            detectTapGestures(onPress = {
+                                latestOnViewMode.value(ImageViewMode.ORIGINAL)
+                                tryAwaitRelease()
+                                latestOnViewMode.value(ImageViewMode.RESULT)
+                            })
+                        }
+                    )
+                } else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
+                ImageViewMode.COMPARE -> if (resultBitmap != null) {
+                    Canvas(Modifier.fillMaxSize().pointerInput(source.width, source.height) {
+                        detectDragGestures { change, _ ->
+                            change.consume()
+                            val canvasWidth = size.width.toFloat()
+                            val canvasHeight = size.height.toFloat()
+                            if (canvasWidth > 0f && canvasHeight > 0f) {
+                                val imageAspect = source.width.toFloat() / source.height
+                                val canvasAspect = canvasWidth / canvasHeight
+                                val displayedWidth = if (imageAspect > canvasAspect) canvasWidth else canvasHeight * imageAspect
+                                val imageLeft = (canvasWidth - displayedWidth) / 2f
+                                if (displayedWidth > 0f) {
+                                    latestOnSplit.value(
+                                        ((change.position.x - imageLeft) / displayedWidth).coerceIn(0.05f, 0.95f)
+                                    )
+                                }
                             }
                         }
+                    }) {
+                        val scale = min(size.width / source.width, size.height / source.height)
+                        val w = (source.width * scale).toInt()
+                        val h = (source.height * scale).toInt()
+                        val left = ((size.width - w) / 2f).toInt()
+                        val top = ((size.height - h) / 2f).toInt()
+                        val dst = IntOffset(left, top)
+                        val dstSize = IntSize(w, h)
+                        drawImage(resultBitmap, dstOffset = dst, dstSize = dstSize)
+                        val divider = left + w * split
+                        clipRect(left.toFloat(), top.toFloat(), divider, (top + h).toFloat()) {
+                            drawImage(originalBitmap, dstOffset = dst, dstSize = dstSize)
+                        }
+                        drawLine(Color.White, Offset(divider, top.toFloat()), Offset(divider, (top + h).toFloat()), 2.dp.toPx())
+                        drawCircle(Color.White, 12.dp.toPx(), Offset(divider, top + h / 2f))
                     }
-                }) {
-                    val scale = min(size.width / source.width, size.height / source.height)
-                    val w = (source.width * scale).toInt()
-                    val h = (source.height * scale).toInt()
-                    val left = ((size.width - w) / 2f).toInt()
-                    val top = ((size.height - h) / 2f).toInt()
-                    val dst = IntOffset(left, top)
-                    val dstSize = IntSize(w, h)
-                    drawImage(resultBitmap, dstOffset = dst, dstSize = dstSize)
-                    val divider = left + w * split
-                    clipRect(left.toFloat(), top.toFloat(), divider, (top + h).toFloat()) {
-                        drawImage(originalBitmap, dstOffset = dst, dstSize = dstSize)
+                } else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
+            }
+            if (resultBitmap != null) {
+                Column(
+                    Modifier.align(Alignment.BottomEnd).padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        onClick = { onViewMode(if (mode == ImageViewMode.COMPARE) ImageViewMode.RESULT else ImageViewMode.COMPARE) },
+                        color = Color.Black.copy(alpha = 0.62f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("⇄", color = Color.White, fontSize = 20.sp)
+                        }
                     }
-                    drawLine(Color.White, Offset(divider, top.toFloat()), Offset(divider, (top + h).toFloat()), 2.dp.toPx())
-                    drawCircle(Color.White, 12.dp.toPx(), Offset(divider, top + h / 2f))
+                    Surface(
+                        onClick = { onViewMode(if (mode == ImageViewMode.ORIGINAL) ImageViewMode.RESULT else ImageViewMode.ORIGINAL) },
+                        color = Color.Black.copy(alpha = 0.62f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(if (mode == ImageViewMode.ORIGINAL) "效" else "原", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
-            } else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
+            }
         }
     }
     if (mode == ImageViewMode.COMPARE && result != null) Text(
