@@ -46,6 +46,10 @@ fun encodeProcessParameters(parameters: ProcessParameters): String {
         .put("clarity", parameters.clarity)
         .put("texture", parameters.texture)
         .put("sharpening", parameters.sharpening)
+        .put("sharpenRadius", parameters.sharpenRadius)
+        .put("sharpenDetail", parameters.sharpenDetail)
+        .put("sharpenMasking", parameters.sharpenMasking)
+        .put("denoiseDetail", parameters.denoiseDetail)
         .put("colorDenoise", parameters.colorDenoise)
         .put("vignette", parameters.vignette)
         .put("curveShadows", parameters.curveShadows)
@@ -114,6 +118,10 @@ fun decodeProcessParameters(raw: String?): ProcessParameters? {
             clarity = json.optDouble("clarity", 0.0).toFloat(),
             texture = json.optDouble("texture", 0.0).toFloat(),
             sharpening = json.optDouble("sharpening", 0.0).toFloat(),
+            sharpenRadius = json.optDouble("sharpenRadius", 1.0).toFloat(),
+            sharpenDetail = json.optDouble("sharpenDetail", 50.0).toFloat(),
+            sharpenMasking = json.optDouble("sharpenMasking", 0.0).toFloat(),
+            denoiseDetail = json.optDouble("denoiseDetail", 50.0).toFloat(),
             colorDenoise = json.optDouble("colorDenoise", 0.0).toFloat(),
             vignette = json.optDouble("vignette", 0.0).toFloat(),
             curveShadows = json.optDouble("curveShadows", 0.0).toFloat(),
