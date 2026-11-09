@@ -16,7 +16,8 @@ data class HistoryItem(
     val timestamp: Long,
     val originalPath: String,
     val resultPath: String,
-    val summary: String
+    val summary: String,
+    val parametersJson: String = ""
 )
 
 object HistoryStore {
@@ -34,14 +35,14 @@ object HistoryStore {
                     add(HistoryItem(
                         o.getString("id"), o.getString("title"), o.getString("mode"),
                         o.getLong("timestamp"), o.getString("originalPath"),
-                        o.getString("resultPath"), o.optString("summary")
+                        o.getString("resultPath"), o.optString("summary"), o.optString("parametersJson")
                     ))
                 }
             }.filter { File(it.originalPath).exists() && File(it.resultPath).exists() }
         } catch (_: Exception) { emptyList() }
     }
 
-    fun save(context: Context, title: String, mode: String, original: PixelImage, result: PixelImage, summary: String): HistoryItem {
+    fun save(context: Context, title: String, mode: String, original: PixelImage, result: PixelImage, summary: String, parametersJson: String = ""): HistoryItem {
         val folder = File(context.filesDir, "nightvision-history")
         check(folder.exists() || folder.mkdirs()) { "无法创建本地记录目录" }
         val id = UUID.randomUUID().toString()
@@ -49,7 +50,7 @@ object HistoryStore {
         val resultFile = File(folder, id + "-result.jpg")
         write(original, originalFile)
         write(result, resultFile)
-        val item = HistoryItem(id, title, mode, System.currentTimeMillis(), originalFile.absolutePath, resultFile.absolutePath, summary)
+        val item = HistoryItem(id, title, mode, System.currentTimeMillis(), originalFile.absolutePath, resultFile.absolutePath, summary, parametersJson)
         val previous = list(context)
         val retained = (listOf(item) + previous).take(LIMIT)
         val keep = retained.map { it.id }.toSet()
@@ -98,7 +99,7 @@ object HistoryStore {
             array.put(JSONObject()
                 .put("id", item.id).put("title", item.title).put("mode", item.mode)
                 .put("timestamp", item.timestamp).put("originalPath", item.originalPath)
-                .put("resultPath", item.resultPath).put("summary", item.summary))
+                .put("resultPath", item.resultPath).put("summary", item.summary).put("parametersJson", item.parametersJson))
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
     }
