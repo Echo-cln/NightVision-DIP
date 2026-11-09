@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -543,23 +545,58 @@ private fun LibraryScreen(
     onDelete: (ImageAsset) -> Unit,
     onToggleFavorite: (ImageAsset) -> Unit
 ) {
+    var search by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("全部") }
+    var pendingDelete by remember { mutableStateOf<ImageAsset?>(null) }
+    val visibleAssets = assets.filter { asset ->
+        val matchesFilter = when (selectedFilter) {
+            "原图" -> asset.sourceType != "处理结果"
+            "处理结果" -> asset.sourceType == "处理结果"
+            "收藏" -> asset.favorite
+            else -> true
+        }
+        matchesFilter && asset.title.contains(search.trim(), ignoreCase = true)
+    }
+
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("图片库", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-                Text(assets.size.toString() + " 张本地图片 · 收藏优先", color = Muted, fontSize = 11.sp)
+                Text(assets.size.toString() + " 张本地图片 · 原始文件独立保存", color = Muted, fontSize = 11.sp)
             }
         }
-        if (assets.isEmpty()) {
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text("搜索图片名称", fontSize = 12.sp) }
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf("全部", "原图", "处理结果", "收藏").forEach { filter ->
+                FilterChip(
+                    selected = selectedFilter == filter,
+                    onClick = { selectedFilter = filter },
+                    label = { Text(filter, fontSize = 10.sp) }
+                )
+            }
+        }
+        if (visibleAssets.isEmpty()) {
             Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().height(180.dp)) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Text("▧", color = accent, fontSize = 38.sp)
-                    Text("图片库还是空的", color = Ink, fontWeight = FontWeight.Medium)
-                    Text("导入或拍摄图片后，会自动保存到本地图片库。", color = Muted, fontSize = 11.sp)
+                    Text(if (assets.isEmpty()) "图片库还是空的" else "没有找到匹配的图片", color = Ink, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (assets.isEmpty()) "导入或拍摄图片后，会自动保存到本地图片库。" else "尝试更换筛选条件或搜索关键词。",
+                        color = Muted, fontSize = 11.sp
+                    )
                 }
             }
         } else {
-            assets.forEach { asset ->
+            visibleAssets.forEach { asset ->
                 val thumbnail = remember(asset.thumbnailPath) {
                     BitmapFactory.decodeFile(asset.thumbnailPath)?.asImageBitmap()
                 }
@@ -583,12 +620,28 @@ private fun LibraryScreen(
                             TextButton(onClick = { onToggleFavorite(asset) }) {
                                 Text(if (asset.favorite) "★" else "☆", color = if (asset.favorite) Color(0xFFB27B35) else Muted, fontSize = 18.sp)
                             }
-                            TextButton(onClick = { onDelete(asset) }) { Text("删除", color = Color(0xFF9A4C4C), fontSize = 10.sp) }
+                            TextButton(onClick = { pendingDelete = asset }) { Text("删除", color = Color(0xFF9A4C4C), fontSize = 10.sp) }
                         }
                     }
                 }
             }
         }
+    }
+    pendingDelete?.let { asset ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除图片？") },
+            text = { Text("将从夜视大师图片库删除“" + asset.title + "”的本地副本。系统相册中的原文件不会被删除。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(asset)
+                    pendingDelete = null
+                }) { Text("删除", color = Color(0xFF9A4C4C)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            }
+        )
     }
 }
 
