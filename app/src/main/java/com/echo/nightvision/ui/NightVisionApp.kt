@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -344,15 +345,32 @@ private fun EditorScreen(
 private fun ImageComparison(source: PixelImage, result: PixelImage?, mode: ImageViewMode, split: Float, onSplit: (Float) -> Unit) {
     val originalBitmap = remember(source) { Bitmap.createBitmap(source.pixels, source.width, source.height, Bitmap.Config.ARGB_8888).asImageBitmap() }
     val resultBitmap = remember(result) { result?.let { Bitmap.createBitmap(it.pixels, it.width, it.height, Bitmap.Config.ARGB_8888).asImageBitmap() } }
+    val latestOnSplit = rememberUpdatedState(onSplit)
     Surface(color = Color(0xFF172522), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().height(265.dp)) {
         when (mode) {
             ImageViewMode.ORIGINAL -> Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
             ImageViewMode.RESULT -> if (resultBitmap != null) Image(resultBitmap, "处理结果", modifier = Modifier.fillMaxSize()) else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
             ImageViewMode.COMPARE -> if (resultBitmap != null) {
-                Canvas(Modifier.fillMaxSize().pointerInput(split) {
+                Canvas(Modifier.fillMaxSize().pointerInput(source.width, source.height) {
                     detectDragGestures { change, _ ->
                         change.consume()
-                        if (size.width > 0) onSplit((change.position.x / size.width).coerceIn(0.05f, 0.95f))
+                        val canvasWidth = size.width.toFloat()
+                        val canvasHeight = size.height.toFloat()
+                        if (canvasWidth > 0f && canvasHeight > 0f) {
+                            val imageAspect = source.width.toFloat() / source.height
+                            val canvasAspect = canvasWidth / canvasHeight
+                            val displayedWidth = if (imageAspect > canvasAspect) {
+                                canvasWidth
+                            } else {
+                                canvasHeight * imageAspect
+                            }
+                            val imageLeft = (canvasWidth - displayedWidth) / 2f
+                            if (displayedWidth > 0f) {
+                                latestOnSplit.value(
+                                    ((change.position.x - imageLeft) / displayedWidth).coerceIn(0.05f, 0.95f)
+                                )
+                            }
+                        }
                     }
                 }) {
                     val scale = min(size.width / source.width, size.height / source.height)
@@ -368,7 +386,7 @@ private fun ImageComparison(source: PixelImage, result: PixelImage?, mode: Image
                         drawImage(originalBitmap, dstOffset = dst, dstSize = dstSize)
                     }
                     drawLine(Color.White, Offset(divider, top.toFloat()), Offset(divider, (top + h).toFloat()), 2.dp.toPx())
-                    drawCircle(Color.White, 12.dp.toPx(), Offset(divider, size.height / 2f))
+                    drawCircle(Color.White, 12.dp.toPx(), Offset(divider, top + h / 2f))
                 }
             } else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
         }
