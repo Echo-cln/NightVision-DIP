@@ -62,7 +62,6 @@ class MainActivity : ComponentActivity() {
                 var viewMode by remember { mutableStateOf(ImageViewMode.RESULT) }
                 var split by remember { mutableStateOf(0.5f) }
                 var message by remember { mutableStateOf<String?>(null) }
-                var cameraUri by remember { mutableStateOf<Uri?>(null) }
                 var previewJob by remember { mutableStateOf<Job?>(null) }
                 var previewVersion by remember { mutableStateOf(0) }
                 val scope = rememberCoroutineScope()
@@ -97,29 +96,12 @@ class MainActivity : ComponentActivity() {
                     ActivityResultContracts.PickVisualMedia()
                 ) { uri -> if (uri != null) loadImage(uri) }
 
-                val cameraCapture = rememberLauncherForActivityResult(
-                    ActivityResultContracts.TakePicture()
-                ) { success ->
-                    val uri = cameraUri
-                    if (success && uri != null) {
-                        contentResolver.update(
-                            uri,
-                            ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
-                            null,
-                            null
-                        )
-                        loadImage(uri)
-                    } else if (uri != null) {
-                        contentResolver.delete(uri, null, null)
-                        message = "已取消拍摄。"
-                    }
-                }
-
                 LaunchedEffect(Unit) {
                     history = withContext(Dispatchers.IO) { HistoryStore.list(this@MainActivity) }
                 }
 
                 NightVisionApp(
+                    lifecycleOwner = this@MainActivity,
                     screen = screen,
                     mode = mode,
                     source = source,
@@ -159,12 +141,8 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onPick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                    onCamera = {
-                        val uri = createCameraUri()
-                        cameraUri = uri
-                        if (uri != null) cameraCapture.launch(uri)
-                        else message = "无法创建拍摄文件，请检查存储空间。"
-                    },
+                    onCamera = { screen = AppScreen.CAMERA },
+                    onCameraPhoto = { uri -> loadImage(uri) },
                     onProcess = {
                         val input = source
                         if (input != null && !busy) {
@@ -342,16 +320,6 @@ class MainActivity : ComponentActivity() {
         val image = PixelImage(bitmap.width, bitmap.height, pixels)
         bitmap.recycle()
         return image
-    }
-
-    private fun createCameraUri(): Uri? {
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "NightVision_Capture_" + System.currentTimeMillis() + ".jpg")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/NightVision/Captures")
-            put(MediaStore.Images.Media.IS_PENDING, 1)
-        }
-        return contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
     }
 
     private fun saveImageToGallery(image: PixelImage) {
