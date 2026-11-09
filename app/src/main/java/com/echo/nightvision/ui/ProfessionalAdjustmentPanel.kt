@@ -78,7 +78,7 @@ fun ProfessionalAdjustmentPanel(
                         when (selectedGroup) {
                             AdjustmentGroup.LIGHT -> parameters.copy(
                                 brightness = 0f, contrast = 0f, exposure = 0f, highlights = 0f,
-                                shadows = 0f, whites = 0f, blacks = 0f, gamma = 100f,
+                                shadows = 0f, whites = 0f, blacks = 0f, gamma = 1f,
                                 curveShadows = 0f, curveMidtones = 0f, curveHighlights = 0f, toneCurve = ToneCurve()
                             )
                             AdjustmentGroup.COLOR -> parameters.copy(
@@ -135,7 +135,7 @@ fun ProfessionalAdjustmentPanel(
                     AdjustmentSlider("黑色色阶", parameters.blacks, -100f..100f, "", accent) {
                         update(parameters.copy(blacks = it))
                     }
-                    AdjustmentSlider("Gamma", parameters.gamma, 20f..300f, "%", accent) {
+                    AdjustmentSlider("Gamma", parameters.gamma, 0.2f..3f, "×", accent) {
                         update(parameters.copy(gamma = it))
                     }
                     HorizontalDivider(color = Color(0xFFE8EEEA))
