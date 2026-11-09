@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
                             previewVersion += 1
                             val image = withContext(Dispatchers.IO) { decodeImage(uri) }
                             val asset = withContext(Dispatchers.IO) {
-                                ImageLibraryStore.save(this@MainActivity, "夜景照片", sourceType, image)
+                                ImageLibraryStore.save(this@MainActivity, "夜景照片", sourceType, image, uri)
                             }
                             assets = listOf(asset) + assets.filterNot { it.id == asset.id }
                             source = image
