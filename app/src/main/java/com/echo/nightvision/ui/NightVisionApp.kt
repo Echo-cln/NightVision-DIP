@@ -278,7 +278,10 @@ private fun EditorScreen(
             Spacer(Modifier.weight(1f))
             Text(if (mode == ProcessingMode.ENHANCE) "低照度增强" else "图像复原", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
-            Text("本机运行", color = Muted, fontSize = 10.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                TextButton(onClick = onPick) { Text("导入", color = accent, fontSize = 10.sp) }
+                TextButton(onClick = onCamera) { Text("拍摄", color = accent, fontSize = 10.sp) }
+            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(if (mode == ProcessingMode.ENHANCE) "让暗部细节显现" else "从一张待校正的图片开始", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
