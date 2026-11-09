@@ -373,15 +373,16 @@ class MainActivity : ComponentActivity() {
         val scale = maxDimension.toFloat() / largest
         val width = (source.width * scale).toInt().coerceAtLeast(1)
         val height = (source.height * scale).toInt().coerceAtLeast(1)
-        val pixels = IntArray(width * height)
-        for (y in 0 until height) {
-            val sourceY = (y * source.height / height).coerceIn(0, source.height - 1)
-            for (x in 0 until width) {
-                val sourceX = (x * source.width / width).coerceIn(0, source.width - 1)
-                pixels[y * width + x] = source.pixels[sourceY * source.width + sourceX]
-            }
+        val original = Bitmap.createBitmap(source.pixels, source.width, source.height, Bitmap.Config.ARGB_8888)
+        val resized = Bitmap.createScaledBitmap(original, width, height, true)
+        return try {
+            val pixels = IntArray(width * height)
+            resized.getPixels(pixels, 0, width, 0, 0, width, height)
+            PixelImage(width, height, pixels)
+        } finally {
+            if (resized !== original) resized.recycle()
+            original.recycle()
         }
-        return PixelImage(width, height, pixels)
     }
 
     private fun decodeImage(uri: Uri): PixelImage {
