@@ -1,6 +1,7 @@
 package com.echo.nightvision.ui
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -54,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.LifecycleOwner
 import com.echo.nightvision.data.HistoryItem
+import com.echo.nightvision.data.ImageAsset
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.ImageStats
 import com.echo.nightvision.processing.PixelImage
@@ -87,6 +89,7 @@ fun NightVisionApp(
     parameters: ProcessParameters,
     busy: Boolean,
     history: List<HistoryItem>,
+    assets: List<ImageAsset>,
     theme: AppThemeChoice,
     viewMode: ImageViewMode,
     split: Float,
@@ -104,6 +107,9 @@ fun NightVisionApp(
     onSave: () -> Unit,
     onSaveRecord: () -> Unit,
     onOpenHistory: (HistoryItem) -> Unit,
+    onOpenAsset: (ImageAsset) -> Unit,
+    onDeleteAsset: (ImageAsset) -> Unit,
+    onToggleFavorite: (ImageAsset) -> Unit,
     onDeleteHistory: (HistoryItem) -> Unit,
     onClearHistory: () -> Unit
 ) {
@@ -136,9 +142,9 @@ fun NightVisionApp(
                 accent, viewMode, split, message, onScreen, onPick, onCamera, onProcess,
                 onParameters, onViewMode, onSplit, onSave, onSaveRecord
             )
-            AppScreen.LIBRARY -> LibraryScreen(Modifier.padding(padding), history, accent, onOpenHistory)
+            AppScreen.LIBRARY -> LibraryScreen(Modifier.padding(padding), assets, accent, onOpenAsset, onDeleteAsset, onToggleFavorite)
             AppScreen.HISTORY -> HistoryScreen(Modifier.padding(padding), history, accent, onOpenHistory, onDeleteHistory, onClearHistory)
-            AppScreen.PROFILE -> ProfileScreen(Modifier.padding(padding), theme, onTheme, accent, history.size)
+            AppScreen.PROFILE -> ProfileScreen(Modifier.padding(padding), theme, onTheme, accent, history.size, assets.size)
         }
     }
 }
@@ -468,23 +474,57 @@ private fun Histogram(stats: ImageStats, accent: Color) {
 @Composable
 private fun LibraryScreen(
     modifier: Modifier,
-    history: List<HistoryItem>,
+    assets: List<ImageAsset>,
     accent: Color,
-    onOpen: (HistoryItem) -> Unit
+    onOpen: (ImageAsset) -> Unit,
+    onDelete: (ImageAsset) -> Unit,
+    onToggleFavorite: (ImageAsset) -> Unit
 ) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("图片库", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-        Text("这里集中查看已经保存处理记录的原图与结果。", color = Muted, fontSize = 11.sp)
-        if (history.isEmpty()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("图片库", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                Text(assets.size.toString() + " 张本地图片 · 收藏优先", color = Muted, fontSize = 11.sp)
+            }
+        }
+        if (assets.isEmpty()) {
             Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().height(180.dp)) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Text("▧", color = accent, fontSize = 38.sp)
                     Text("图片库还是空的", color = Ink, fontWeight = FontWeight.Medium)
-                    Text("完成处理并保存记录后，图片会出现在这里。", color = Muted, fontSize = 11.sp)
+                    Text("导入或拍摄图片后，会自动保存到本地图片库。", color = Muted, fontSize = 11.sp)
                 }
             }
         } else {
-            history.forEach { item -> HistoryRow(item, accent, { onOpen(item) }, null) }
+            assets.forEach { asset ->
+                val thumbnail = remember(asset.thumbnailPath) {
+                    BitmapFactory.decodeFile(asset.thumbnailPath)?.asImageBitmap()
+                }
+                Surface(color = Color.White, shape = RoundedCornerShape(15.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (thumbnail != null) {
+                            Image(thumbnail, contentDescription = asset.title, modifier = Modifier.size(76.dp).clip(RoundedCornerShape(10.dp)))
+                        } else {
+                            Box(Modifier.size(76.dp).background(Color(0xFFEAF0EC), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                                Text("▧", color = accent, fontSize = 24.sp)
+                            }
+                        }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(asset.title, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+                            Text(asset.sourceType + " · " + asset.width + "×" + asset.height, color = Muted, fontSize = 9.sp)
+                            Text(java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(asset.timestamp)), color = Muted, fontSize = 9.sp)
+                            TextButton(onClick = { onOpen(asset) }) { Text("打开编辑", color = accent, fontSize = 11.sp) }
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            TextButton(onClick = { onToggleFavorite(asset) }) {
+                                Text(if (asset.favorite) "★" else "☆", color = if (asset.favorite) Color(0xFFB27B35) else Muted, fontSize = 18.sp)
+                            }
+                            TextButton(onClick = { onDelete(asset) }) { Text("删除", color = Color(0xFF9A4C4C), fontSize = 10.sp) }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -495,7 +535,8 @@ private fun ProfileScreen(
     theme: AppThemeChoice,
     onTheme: (AppThemeChoice) -> Unit,
     accent: Color,
-    recordCount: Int
+    recordCount: Int,
+    assetCount: Int
 ) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("我的", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
@@ -526,6 +567,7 @@ private fun ProfileScreen(
             Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("工作空间", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text("已保存处理记录： " + recordCount, color = Muted, fontSize = 11.sp)
+                Text("图片库资产： " + assetCount, color = Muted, fontSize = 11.sp)
                 Text("默认处理：自动增强，可在编辑器中切换手动精修。", color = Muted, fontSize = 11.sp)
                 Text("原始图片不会被处理结果覆盖。", color = Muted, fontSize = 11.sp)
             }
