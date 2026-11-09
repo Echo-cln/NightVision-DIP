@@ -333,6 +333,7 @@ private fun EditorScreen(
                         Text("系统根据平均亮度、暗部比例、亮部占比与噪声参考值匹配处理参数。", color = Muted, fontSize = 11.sp)
                         if (report != null) {
                             Text("平均亮度 " + report.original.mean.toInt() + "/255 · 暗部 " + report.original.darkPercent + "% · 高光 " + report.original.highlightPercent + "%", color = accent, fontSize = 11.sp)
+                            Text("噪声参考值 " + (report.original.residualReference?.let { String.format(java.util.Locale.getDefault(), "%.2f", it) } ?: "不可估计") + " · 通道均值 R/G/B " + report.original.channelMeans.joinToString(" / ") { it.toInt().toString() }, color = Muted, fontSize = 10.sp)
                             Text("本次实际执行 " + report.steps.size + " 个处理步骤 · " + report.elapsedMillis + " ms", color = Muted, fontSize = 10.sp)
                         }
                     }
@@ -496,6 +497,10 @@ private fun StatsCard(report: ProcessingReport, accent: Color) {
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 Stat("平均亮度", report.original.mean.toInt().toString() + " → " + report.processed.mean.toInt(), accent, Modifier.weight(1f))
                 Stat("暗部比例", report.original.darkPercent.toString() + "% → " + report.processed.darkPercent + "%", accent, Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Stat("高光比例", report.original.highlightPercent.toString() + "%", accent, Modifier.weight(1f))
+                Stat("噪声参考", report.original.residualReference?.let { String.format(java.util.Locale.getDefault(), "%.2f", it) } ?: "不可估计", accent, Modifier.weight(1f))
             }
             Text("原图亮度分布", color = Muted, fontSize = 10.sp)
             Histogram(report.original, accent)
