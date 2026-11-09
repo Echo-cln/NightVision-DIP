@@ -185,7 +185,7 @@ fun CameraScreen(
                         onClick = { flashOn = !flashOn },
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.48f))
                     ) {
-                        Text(if (flashOn) "闪光灯开" else "闪光灯关", color = Color.White, fontSize = 11.sp)
+                        Text(if (flashOn) "补光灯开" else "补光灯关", color = Color.White, fontSize = 11.sp)
                     }
                 }
                 Spacer(Modifier.weight(1f))
