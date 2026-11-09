@@ -18,6 +18,15 @@ data class HslAdjustment(
 
 fun defaultHslAdjustments(): List<HslAdjustment> = List(8) { HslAdjustment() }
 
+private fun identityToneCurve(): List<Float> = listOf(0f, 64f, 128f, 192f, 255f)
+
+data class ToneCurve(
+    val rgb: List<Float> = identityToneCurve(),
+    val red: List<Float> = identityToneCurve(),
+    val green: List<Float> = identityToneCurve(),
+    val blue: List<Float> = identityToneCurve()
+)
+
 data class PixelImage(val width: Int, val height: Int, val pixels: IntArray) {
     init {
         require(width > 0 && height > 0 && pixels.size == width * height) { "图像尺寸与像素数量不匹配" }
@@ -50,7 +59,8 @@ data class ProcessParameters(
     val curveHighlights: Float = 0f,
     val toneMethod: ToneMethod = ToneMethod.GAMMA,
     val whiteBalance: Boolean = false,
-    val hslAdjustments: List<HslAdjustment> = defaultHslAdjustments()
+    val hslAdjustments: List<HslAdjustment> = defaultHslAdjustments(),
+    val toneCurve: ToneCurve = ToneCurve()
 )
 
 data class ImageStats(
@@ -217,6 +227,13 @@ object ImageProcessor {
                 g = rgb[1]
                 b = rgb[2]
             }
+
+            r = applyCurve(r, p.toneCurve.rgb)
+            g = applyCurve(g, p.toneCurve.rgb)
+            b = applyCurve(b, p.toneCurve.rgb)
+            r = applyCurve(r, p.toneCurve.red)
+            g = applyCurve(g, p.toneCurve.green)
+            b = applyCurve(b, p.toneCurve.blue)
 
             val x = index % source.width
             val row = index / source.width
@@ -442,6 +459,16 @@ object ImageProcessor {
                 (r.toInt().coerceIn(0, 255) shl 16) or
                 (g.toInt().coerceIn(0, 255) shl 8) or b.toInt().coerceIn(0, 255)
         }
+    }
+
+    private fun applyCurve(value: Double, points: List<Float>): Double {
+        if (points.size != 5) return value.coerceIn(0.0, 255.0)
+        val position = value.coerceIn(0.0, 255.0) / 255.0 * 4.0
+        val left = position.toInt().coerceIn(0, 3)
+        val fraction = position - left
+        val a = points[left].coerceIn(0f, 255f).toDouble()
+        val b = points[left + 1].coerceIn(0f, 255f).toDouble()
+        return (a + (b - a) * fraction).coerceIn(0.0, 255.0)
     }
 
     private fun rgbToHsl(rValue: Double, gValue: Double, bValue: Double): DoubleArray {
