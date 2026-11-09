@@ -22,6 +22,8 @@ import com.echo.nightvision.data.HistoryItem
 import com.echo.nightvision.data.HistoryStore
 import com.echo.nightvision.data.ImageAsset
 import com.echo.nightvision.data.ImageLibraryStore
+import com.echo.nightvision.data.encodeProcessParameters
+import com.echo.nightvision.data.decodeProcessParameters
 import com.echo.nightvision.processing.ImageProcessor
 import com.echo.nightvision.processing.PixelImage
 import com.echo.nightvision.processing.ProcessParameters
@@ -229,7 +231,8 @@ class MainActivity : ComponentActivity() {
                                             mode.name,
                                             original,
                                             processed,
-                                            params.toString()
+                                            "本次参数已结构化保存",
+                                            encodeProcessParameters(params)
                                         )
                                     }
                                     history = listOf(saved) + history.filterNot { it.id == saved.id }
@@ -311,7 +314,7 @@ class MainActivity : ComponentActivity() {
                                     result = pair.second
                                     mode = if (item.mode == ProcessingMode.RESTORE.name) ProcessingMode.RESTORE else ProcessingMode.ENHANCE
                                     report = null
-                                    params = ProcessParameters(auto = false)
+                                    params = decodeProcessParameters(item.parametersJson) ?: ProcessParameters(auto = false)
                                     viewMode = ImageViewMode.RESULT
                                     screen = AppScreen.EDITOR
                                 } else {
