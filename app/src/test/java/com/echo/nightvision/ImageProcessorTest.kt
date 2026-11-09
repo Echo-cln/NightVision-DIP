@@ -4,6 +4,7 @@ import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.ImageProcessor
 import com.echo.nightvision.processing.HslAdjustment
 import com.echo.nightvision.processing.ToneMethod
+import com.echo.nightvision.processing.ToneCurve
 import com.echo.nightvision.processing.PixelImage
 import com.echo.nightvision.processing.ProcessParameters
 import com.echo.nightvision.processing.ProcessingMode
@@ -143,6 +144,18 @@ class ImageProcessorTest {
         )
         assertTrue(result.image.pixels.toSet().size >= 2)
         assertEquals(64, result.report.processed.histogram.sum())
+    }
+
+    @Test
+    fun rgbToneCurveMapsMidpointIndependently() {
+        val source = PixelImage(1, 1, intArrayOf(0xFF808080.toInt()))
+        val curve = ToneCurve(rgb = listOf(0f, 64f, 190f, 220f, 255f))
+        val result = ImageProcessor.process(
+            source, ProcessingMode.ENHANCE,
+            ProcessParameters(brightness = 0f, contrast = 0f, denoise = 0f, toneCurve = curve, auto = false)
+        )
+        val channel = (result.image.pixels[0] ushr 16) and 255
+        assertTrue(channel >= 185)
     }
 
 }
