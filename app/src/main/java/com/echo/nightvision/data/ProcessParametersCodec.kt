@@ -112,7 +112,7 @@ fun decodeProcessParameters(raw: String?): ProcessParameters? {
             shadows = json.optDouble("shadows", 0.0).toFloat(),
             whites = json.optDouble("whites", 0.0).toFloat(),
             blacks = json.optDouble("blacks", 0.0).toFloat(),
-            gamma = json.optDouble("gamma", 1.0).toFloat(),
+            gamma = json.optDouble("gamma", 1.0).let { if (it > 3.0) it / 100.0 else it }.toFloat(),
             tint = json.optDouble("tint", 0.0).toFloat(),
             vibrance = json.optDouble("vibrance", 0.0).toFloat(),
             clarity = json.optDouble("clarity", 0.0).toFloat(),
