@@ -2,7 +2,7 @@ package com.echo.nightvision
 
 import android.content.ContentValues
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -223,20 +223,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun decodeImage(uri: Uri): PixelImage {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        contentResolver.openInputStream(uri).use { stream ->
-            BitmapFactory.decodeStream(stream, null, bounds)
+        val imageSource = ImageDecoder.createSource(contentResolver, uri)
+        val bitmap = ImageDecoder.decodeBitmap(imageSource) { decoder, info, _ ->
+            var sample = 1
+            val maxDimension = maxOf(info.size.width, info.size.height)
+            while (maxDimension / sample > 1800) sample *= 2
+            decoder.setTargetSampleSize(sample)
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
         }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) error("无法识别该图片格式。")
-        var sample = 1
-        while (maxOf(bounds.outWidth / sample, bounds.outHeight / sample) > 1800) sample *= 2
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.ARGB_8888
-        }
-        val bitmap = contentResolver.openInputStream(uri).use { stream ->
-            BitmapFactory.decodeStream(stream, null, options)
-        } ?: error("图片解码失败。")
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val image = PixelImage(bitmap.width, bitmap.height, pixels)
