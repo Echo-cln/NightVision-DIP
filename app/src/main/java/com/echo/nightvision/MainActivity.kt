@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
                 var previewVersion by remember { mutableStateOf(0) }
                 val scope = rememberCoroutineScope()
 
-                fun loadImage(uri: Uri) {
+                fun loadImage(uri: Uri, sourceType: String = "导入图片") {
                     scope.launch {
                         busy = true
                         message = null
@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
                             previewVersion += 1
                             val image = withContext(Dispatchers.IO) { decodeImage(uri) }
                             val asset = withContext(Dispatchers.IO) {
-                                ImageLibraryStore.save(this@MainActivity, "夜景照片", if (uri.scheme == "file") "现场拍摄" else "导入图片", image)
+                                ImageLibraryStore.save(this@MainActivity, "夜景照片", sourceType, image)
                             }
                             assets = listOf(asset) + assets.filterNot { it.id == asset.id }
                             source = image
@@ -151,7 +151,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onPick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     onCamera = { screen = AppScreen.CAMERA },
-                    onCameraPhoto = { uri -> loadImage(uri) },
+                    onCameraPhoto = { uri -> loadImage(uri, "现场拍摄") },
                     onProcess = {
                         val input = source
                         if (input != null && !busy) {
