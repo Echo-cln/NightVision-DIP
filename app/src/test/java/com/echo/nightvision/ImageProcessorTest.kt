@@ -66,7 +66,7 @@ class ImageProcessorTest {
             ProcessParameters(
                 brightness = 0f, contrast = 0f, denoise = 100f,
                 saturation = 100f, temperature = 0f,
-                denoiseMethod = DenoiseMethod.MEDIAN, auto = false
+                denoiseMethod = DenoiseMethod.MEDIAN, denoiseDetail = 0f, auto = false
             )
         )
         assertEquals(100, (result.image.pixels[4] ushr 16) and 255)
