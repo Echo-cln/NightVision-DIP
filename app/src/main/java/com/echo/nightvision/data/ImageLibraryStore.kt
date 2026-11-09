@@ -95,14 +95,20 @@ object ImageLibraryStore {
         } ?: "jpg"
         val imageFile = File(folder, id + "." + extension)
         val thumbnailFile = File(folder, id + "-thumb.jpg")
-        if (sourceUri != null) {
-            val input = context.contentResolver.openInputStream(sourceUri)
-                ?: error("无法读取原始图片文件。")
-            input.use { source -> imageFile.outputStream().use { destination -> source.copyTo(destination) } }
-        } else {
-            writeJpeg(image, imageFile, 94, 0)
+        try {
+            if (sourceUri != null) {
+                val input = context.contentResolver.openInputStream(sourceUri)
+                    ?: error("无法读取原始图片文件。")
+                input.use { source -> imageFile.outputStream().use { destination -> source.copyTo(destination) } }
+            } else {
+                writeJpeg(image, imageFile, 94, 0)
+            }
+            writeJpeg(image, thumbnailFile, 82, 360)
+        } catch (error: Exception) {
+            imageFile.delete()
+            thumbnailFile.delete()
+            throw error
         }
-        writeJpeg(image, thumbnailFile, 82, 360)
         val asset = ImageAsset(
             id = id,
             title = title.ifBlank { "未命名图片" },
