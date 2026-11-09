@@ -70,7 +70,7 @@ private val Amber = Color(0xFF8A6332)
 private val RoseSoft = Color(0xFFF7EDF1)
 private val AmberSoft = Color(0xFFF7F0E6)
 
-enum class AppScreen { HOME, EDITOR, HISTORY }
+enum class AppScreen { HOME, EDITOR, LIBRARY, HISTORY, PROFILE }
 enum class ImageViewMode { RESULT, ORIGINAL, COMPARE }
 enum class AppThemeChoice { GREEN, BERRY, AMBER }
 
@@ -117,7 +117,9 @@ fun NightVisionApp(
         bottomBar = {
             if (screen != AppScreen.EDITOR) NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(screen == AppScreen.HOME, { onScreen(AppScreen.HOME) }, icon = { Text("⌂") }, label = { Text("首页") })
-                NavigationBarItem(screen == AppScreen.HISTORY, { onScreen(AppScreen.HISTORY) }, icon = { Text("◷") }, label = { Text("处理记录") })
+                NavigationBarItem(screen == AppScreen.LIBRARY, { onScreen(AppScreen.LIBRARY) }, icon = { Text("▧") }, label = { Text("图片库") })
+                NavigationBarItem(screen == AppScreen.HISTORY, { onScreen(AppScreen.HISTORY) }, icon = { Text("◷") }, label = { Text("记录") })
+                NavigationBarItem(screen == AppScreen.PROFILE, { onScreen(AppScreen.PROFILE) }, icon = { Text("●") }, label = { Text("我的") })
             }
         }
     ) { padding ->
@@ -128,7 +130,9 @@ fun NightVisionApp(
                 accent, viewMode, split, message, onScreen, onPick, onCamera, onProcess,
                 onParameters, onViewMode, onSplit, onSave
             )
+            AppScreen.LIBRARY -> LibraryScreen(Modifier.padding(padding), history, accent, onOpenHistory)
             AppScreen.HISTORY -> HistoryScreen(Modifier.padding(padding), history, accent, onOpenHistory, onDeleteHistory, onClearHistory)
+            AppScreen.PROFILE -> ProfileScreen(Modifier.padding(padding), theme, onTheme, accent, history.size)
         }
     }
 }
@@ -155,11 +159,6 @@ private fun HomeScreen(
                 Text("NIGHTVISION · IMAGE STUDIO", color = Muted, fontSize = 9.sp, letterSpacing = 1.sp)
             }
             TextButton(onClick = { onScreen(AppScreen.HISTORY) }) { Text("记录", color = accent) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            ThemeChip("苔绿", theme == AppThemeChoice.GREEN, Green) { onTheme(AppThemeChoice.GREEN) }
-            ThemeChip("莓酒红", theme == AppThemeChoice.BERRY, Rose) { onTheme(AppThemeChoice.BERRY) }
-            ThemeChip("暖棕金", theme == AppThemeChoice.AMBER, Amber) { onTheme(AppThemeChoice.AMBER) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text("NIGHTVISION · IMAGE STUDIO", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
@@ -294,30 +293,37 @@ private fun EditorScreen(
                     TextButton(onClick = onSave) { Text("保存", color = accent, fontSize = 12.sp) }
                 }
             }
-            if (report != null) StatsCard(report, accent)
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
-                Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("处理参数", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { onParams(ProcessParameters()) }) {
-                            Text("恢复自动匹配", color = accent, fontSize = 10.sp)
-                        }
-                    }
-                    ParamSlider("亮度", params.brightness, -100f..100f, { it.toInt().toString() }) { onParams(params.copy(brightness = it, auto = false)) }
-                    ParamSlider("对比度", params.contrast, -100f..100f, { it.toInt().toString() }) { onParams(params.copy(contrast = it, auto = false)) }
-                    ParamSlider("降噪强度", params.denoise, 0f..100f, { it.toInt().toString() + "%" }) { onParams(params.copy(denoise = it, auto = false)) }
-                    ParamSlider("饱和度", params.saturation, 0f..200f, { it.toInt().toString() + "%" }) { onParams(params.copy(saturation = it, auto = false)) }
-                    ParamSlider("色温", params.temperature, -40f..40f, { it.toInt().toString() }) { onParams(params.copy(temperature = it, auto = false)) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        FilterChip(params.denoiseMethod == DenoiseMethod.GAUSSIAN, { onParams(params.copy(denoiseMethod = DenoiseMethod.GAUSSIAN, auto = false)) }, label = { Text("高斯滤波") })
-                        FilterChip(params.denoiseMethod == DenoiseMethod.MEDIAN, { onParams(params.copy(denoiseMethod = DenoiseMethod.MEDIAN, auto = false)) }, label = { Text("中值滤波") })
-                    }
-                    Button(onClick = onProcess, enabled = !busy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = accent)) {
-                        Text(if (busy) "正在处理…" else if (result == null) "开始处理" else "应用当前参数")
-                    }
-                    if (message != null) Text(message, color = Muted, fontSize = 11.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = params.auto,
+                    onClick = { onParams(ProcessParameters()) },
+                    label = { Text("自动增强", fontSize = 11.sp) }
+                )
+                FilterChip(
+                    selected = !params.auto,
+                    onClick = { onParams(params.copy(auto = false)) },
+                    label = { Text("手动精修", fontSize = 11.sp) }
+                )
+                Spacer(Modifier.weight(1f))
+                if (params.auto) TextButton(onClick = onProcess, enabled = !busy) {
+                    Text("重新分析", color = accent, fontSize = 11.sp)
                 }
             }
+            if (params.auto) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text("自动增强方案", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("系统根据平均亮度、暗部比例、亮部占比与噪声参考值匹配处理参数。", color = Muted, fontSize = 11.sp)
+                        if (report != null) {
+                            Text("平均亮度 " + report.original.mean.toInt() + "/255 · 暗部 " + report.original.darkPercent + "% · 高光 " + report.original.highlightPercent + "%", color = accent, fontSize = 11.sp)
+                            Text("本次实际执行 " + report.steps.size + " 个处理步骤 · " + report.elapsedMillis + " ms", color = Muted, fontSize = 10.sp)
+                        }
+                    }
+                }
+            } else {
+                ProfessionalAdjustmentPanel(params, accent, onParams)
+            }
+            if (message != null) Text(message, color = Muted, fontSize = 11.sp)
             if (report != null) {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
                     Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -447,6 +453,81 @@ private fun Histogram(stats: ImageStats, accent: Color) {
                     .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
                     .background(accent.copy(alpha = 0.72f))
             )
+        }
+    }
+}
+
+@Composable
+private fun LibraryScreen(
+    modifier: Modifier,
+    history: List<HistoryItem>,
+    accent: Color,
+    onOpen: (HistoryItem) -> Unit
+) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("图片库", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        Text("这里集中查看已经保存处理记录的原图与结果。", color = Muted, fontSize = 11.sp)
+        if (history.isEmpty()) {
+            Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().height(180.dp)) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Text("▧", color = accent, fontSize = 38.sp)
+                    Text("图片库还是空的", color = Ink, fontWeight = FontWeight.Medium)
+                    Text("完成处理并保存记录后，图片会出现在这里。", color = Muted, fontSize = 11.sp)
+                }
+            }
+        } else {
+            history.forEach { item -> HistoryRow(item, accent, { onOpen(item) }, null) }
+        }
+    }
+}
+
+@Composable
+private fun ProfileScreen(
+    modifier: Modifier,
+    theme: AppThemeChoice,
+    onTheme: (AppThemeChoice) -> Unit,
+    accent: Color,
+    recordCount: Int
+) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("我的", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(color = accent.copy(alpha = 0.12f), shape = CircleShape, modifier = Modifier.size(52.dp)) {
+                    Box(contentAlignment = Alignment.Center) { Text("☾", color = accent, fontSize = 28.sp) }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("夜视大师工作空间", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("本地使用 · 图片在设备端处理", color = Muted, fontSize = 11.sp)
+                }
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("外观偏好", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("主题设置集中放在这里，不再占用首页空间。", color = Muted, fontSize = 10.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    ThemeChip("苔绿", theme == AppThemeChoice.GREEN, Green) { onTheme(AppThemeChoice.GREEN) }
+                    ThemeChip("莓酒红", theme == AppThemeChoice.BERRY, Rose) { onTheme(AppThemeChoice.BERRY) }
+                    ThemeChip("暖棕金", theme == AppThemeChoice.AMBER, Amber) { onTheme(AppThemeChoice.AMBER) }
+                }
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("工作空间", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("已保存处理记录： " + recordCount, color = Muted, fontSize = 11.sp)
+                Text("默认处理：自动增强，可在编辑器中切换手动精修。", color = Muted, fontSize = 11.sp)
+                Text("原始图片不会被处理结果覆盖。", color = Muted, fontSize = 11.sp)
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("关于夜视大师", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("NightVision-DIP · 数字图像处理课程项目", color = Muted, fontSize = 11.sp)
+                Text("以经典图像处理算法完成低照度增强与图像复原。", color = Muted, fontSize = 11.sp)
+            }
         }
     }
 }
