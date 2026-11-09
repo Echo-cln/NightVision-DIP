@@ -162,6 +162,12 @@ object ImageLibraryStore {
         }
     }
 
+    fun storageBytes(context: Context): Long {
+        return list(context).sumOf { asset ->
+            File(asset.imagePath).length() + File(asset.thumbnailPath).length()
+        }
+    }
+
     fun setFavorite(context: Context, id: String, favorite: Boolean) {
         val db = LibraryDatabase(context).writableDatabase
         db.update(TABLE, ContentValues().apply { put("favorite", if (favorite) 1 else 0) }, "id = ?", arrayOf(id))
