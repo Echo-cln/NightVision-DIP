@@ -24,7 +24,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -165,11 +165,11 @@ private fun HomeScreen(
             Text("让暗处，重新清晰。", color = Ink, fontSize = 28.sp, fontWeight = FontWeight.Medium)
             Text("选择处理功能，再导入照片或现场拍摄。", color = Muted, fontSize = 13.sp)
         }
-        ModuleCard("低照度增强", "提亮暗部，调整对比度，\\n看清夜色里的更多细节。", "自动增强", accent, soft, "☼") {
+        ModuleCard("低照度增强", "提亮暗部，调整对比度，\n看清夜色里的更多细节。", "自动增强", accent, soft, "☼") {
             onMode(ProcessingMode.ENHANCE)
             onScreen(AppScreen.EDITOR)
         }
-        ModuleCard("图像复原", "校正颜色与亮度，\\n对照处理前后的完整画面。", "图像校正", Amber, AmberSoft, "⌁") {
+        ModuleCard("图像复原", "校正颜色与亮度，\n对照处理前后的完整画面。", "图像校正", Amber, AmberSoft, "⌁") {
             onMode(ProcessingMode.RESTORE)
             onScreen(AppScreen.EDITOR)
         }
@@ -277,6 +277,7 @@ private fun EditorScreen(
                 Button(onClick = onPick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = accent)) { Text("导入照片") }
                 OutlinedButton(onClick = onCamera, modifier = Modifier.weight(1f)) { Text("现场拍照", color = accent) }
             }
+            if (message != null) Text(message, color = Color(0xFF9A4C4C), fontSize = 11.sp)
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("处理预览", color = Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -297,7 +298,9 @@ private fun EditorScreen(
                 Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("处理参数", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                        Text(if (params.auto) "自动匹配待执行" else "当前设置", color = accent, fontSize = 10.sp)
+                        TextButton(onClick = { onParams(ProcessParameters()) }) {
+                            Text("恢复自动匹配", color = accent, fontSize = 10.sp)
+                        }
                     }
                     ParamSlider("亮度", params.brightness, -100f..100f, { it.toInt().toString() }) { onParams(params.copy(brightness = it, auto = false)) }
                     ParamSlider("对比度", params.contrast, -100f..100f, { it.toInt().toString() }) { onParams(params.copy(contrast = it, auto = false)) }
@@ -327,7 +330,7 @@ private fun EditorScreen(
                                 }
                             }
                         }
-                        Divider(color = Line)
+                        HorizontalDivider(color = Line)
                         Text("本次计算耗时 " + report.elapsedMillis + " ms", color = Muted, fontSize = 10.sp)
                     }
                 }
