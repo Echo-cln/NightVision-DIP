@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
                 var busy by remember { mutableStateOf(false) }
                 var history by remember { mutableStateOf(HistoryStore.list(this@MainActivity)) }
                 var assets by remember { mutableStateOf(ImageLibraryStore.list(this@MainActivity)) }
+                var autoProcessOnImport by remember { mutableStateOf(getSharedPreferences("nightvision_settings", MODE_PRIVATE).getBoolean("autoProcessOnImport", true)) }
+                var exportQuality by remember { mutableStateOf(getSharedPreferences("nightvision_settings", MODE_PRIVATE).getInt("exportQuality", 94)) }
                 var theme by remember {
                     mutableStateOf(
                         runCatching {
@@ -84,13 +86,19 @@ class MainActivity : ComponentActivity() {
                             }
                             assets = listOf(asset) + assets.filterNot { it.id == asset.id }
                             source = image
-                            params = ProcessParameters()
-                            val processed = withContext(Dispatchers.Default) {
-                                ImageProcessor.process(image, mode, ProcessParameters())
+                            params = if (autoProcessOnImport) ProcessParameters() else ProcessParameters(auto = false)
+                            if (autoProcessOnImport) {
+                                val processed = withContext(Dispatchers.Default) {
+                                    ImageProcessor.process(image, mode, ProcessParameters())
+                                }
+                                result = processed.image
+                                report = processed.report
+                                viewMode = ImageViewMode.RESULT
+                            } else {
+                                result = null
+                                report = null
+                                viewMode = ImageViewMode.ORIGINAL
                             }
-                            result = processed.image
-                            report = processed.report
-                            viewMode = ImageViewMode.RESULT
                             split = 0.5f
                             screen = AppScreen.EDITOR
                         } catch (error: Exception) {
@@ -121,6 +129,8 @@ class MainActivity : ComponentActivity() {
                     busy = busy,
                     history = history,
                     assets = assets,
+                    autoProcessOnImport = autoProcessOnImport,
+                    exportQuality = exportQuality,
                     theme = theme,
                     viewMode = viewMode,
                     split = split,
@@ -129,6 +139,16 @@ class MainActivity : ComponentActivity() {
                         theme = it
                         getSharedPreferences("nightvision_settings", MODE_PRIVATE)
                             .edit().putString("theme", it.name).apply()
+                    },
+                    onAutoProcessOnImportChange = {
+                        autoProcessOnImport = it
+                        getSharedPreferences("nightvision_settings", MODE_PRIVATE)
+                            .edit().putBoolean("autoProcessOnImport", it).apply()
+                    },
+                    onExportQualityChange = {
+                        exportQuality = it.coerceIn(85, 100)
+                        getSharedPreferences("nightvision_settings", MODE_PRIVATE)
+                            .edit().putInt("exportQuality", exportQuality).apply()
                     },
                     onScreen = { screen = it },
                     onMode = {
@@ -377,7 +397,7 @@ class MainActivity : ComponentActivity() {
         return image
     }
 
-    private fun saveImageToGallery(image: PixelImage) {
+    private fun saveImageToGallery(image: PixelImage, quality: Int) {
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, "NightVision_" + System.currentTimeMillis() + ".jpg")
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -389,7 +409,7 @@ class MainActivity : ComponentActivity() {
         try {
             val bitmap = Bitmap.createBitmap(image.pixels, image.width, image.height, Bitmap.Config.ARGB_8888)
             contentResolver.openOutputStream(uri, "w").use { stream ->
-                check(stream != null && bitmap.compress(Bitmap.CompressFormat.JPEG, 94, stream)) { "图片写入失败。" }
+                check(stream != null && bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(85, 100), stream)) { "图片写入失败。" }
             }
             bitmap.recycle()
             contentResolver.update(
