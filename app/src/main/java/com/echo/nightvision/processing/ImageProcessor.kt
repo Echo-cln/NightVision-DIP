@@ -52,6 +52,10 @@ data class ProcessParameters(
     val clarity: Float = 0f,
     val texture: Float = 0f,
     val sharpening: Float = 0f,
+    val sharpenRadius: Float = 1f,
+    val sharpenDetail: Float = 50f,
+    val sharpenMasking: Float = 0f,
+    val denoiseDetail: Float = 50f,
     val colorDenoise: Float = 0f,
     val vignette: Float = 0f,
     val curveShadows: Float = 0f,
@@ -129,13 +133,17 @@ object ImageProcessor {
         val output = source.pixels.copyOf()
 
         if (p.denoise > 0f) {
-            denoise(source, output, p.denoise.coerceIn(0f, 100f) / 100.0, p.denoiseMethod)
+            val denoiseAmount = (p.denoise.coerceIn(0f, 100f) / 100.0) * (1.0 - p.denoiseDetail.coerceIn(0f, 100f) / 100.0 * 0.45)
+            denoise(source, output, denoiseAmount, p.denoiseMethod)
         }
         if (p.colorDenoise > 0f) {
             denoiseChroma(source, output, p.colorDenoise.coerceIn(0f, 100f) / 100.0)
         }
 
-        val localLuma = localMeanLuma(source)
+        val localLumaClarity = localMeanLuma(source, 2)
+        val localLumaTexture = localMeanLuma(source, 1)
+        val sharpenRadius = p.sharpenRadius.toInt().coerceIn(1, 3)
+        val localLumaSharpen = localMeanLuma(source, sharpenRadius)
         val histogramLut = if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) histogramLut(source) else null
         val channelAverage = before.channelMeans.average()
         val wb = before.channelMeans.map { (channelAverage / max(1.0, it)).coerceIn(0.75, 1.3) }
@@ -175,12 +183,15 @@ object ImageProcessor {
             y = 255.0 * (y / 255.0).coerceIn(0.0, 1.0).pow(gamma)
             y = (y - 128.0) * gain + 128.0
 
-            val highFrequency = y - localLuma[index]
-            val localAdjustment =
-                p.clarity.coerceIn(-100f, 100f) * 0.006 +
-                p.texture.coerceIn(-100f, 100f) * 0.003 +
-                p.sharpening.coerceIn(0f, 150f) * 0.004
-            y += highFrequency * localAdjustment
+            val clarityResidual = originalY - localLumaClarity[index]
+            val textureResidual = originalY - localLumaTexture[index]
+            val sharpenResidual = originalY - localLumaSharpen[index]
+            val maskingThreshold = p.sharpenMasking.coerceIn(0f, 100f) / 100.0 * 32.0
+            val sharpenMask = smoothstep(maskingThreshold, maskingThreshold + 12.0, abs(sharpenResidual))
+            val detailFactor = 0.35 + p.sharpenDetail.coerceIn(0f, 100f) / 100.0 * 0.65
+            y += clarityResidual * p.clarity.coerceIn(-100f, 100f) / 100.0 * 0.55
+            y += textureResidual * p.texture.coerceIn(-100f, 100f) / 100.0 * 0.30
+            y += sharpenResidual * p.sharpening.coerceIn(0f, 150f) / 100.0 * detailFactor * 0.85 * sharpenMask
 
             val tonalDelta = y - originalY
             r += tonalDelta
@@ -270,7 +281,7 @@ object ImageProcessor {
                 add(ProcessingStep("分区影调调整", "阴影、高光、白色色阶与黑色色阶独立映射"))
             }
             if (p.clarity != 0f || p.texture != 0f || p.sharpening != 0f) {
-                add(ProcessingStep("局部细节增强", "清晰度、纹理与锐化基于局部高频残差"))
+                add(ProcessingStep("局部细节增强", "清晰度/纹理分尺度增强；锐化半径 " + sharpenRadius + "，细节 " + p.sharpenDetail.toInt() + "%，蒙版 " + p.sharpenMasking.toInt() + "%"))
             }
             if (p.whiteBalance || mode == ProcessingMode.RESTORE) {
                 add(ProcessingStep("灰度世界白平衡", "RGB 增益 " + wb.joinToString(" / ") { String.format("%.2f", it) }))
@@ -335,7 +346,7 @@ object ImageProcessor {
         return lut
     }
 
-    private fun localMeanLuma(source: PixelImage): FloatArray {
+    private fun localMeanLuma(source: PixelImage, radius: Int): FloatArray {
         val width = source.width
         val height = source.height
         val values = FloatArray(width * height)
@@ -350,7 +361,7 @@ object ImageProcessor {
         for (y in 0 until height) for (x in 0 until width) {
             var sum = 0f
             var count = 0
-            for (dy in -1..1) for (dx in -1..1) {
+            for (dy in -radius..radius) for (dx in -radius..radius) {
                 val xx = (x + dx).coerceIn(0, width - 1)
                 val yy = (y + dy).coerceIn(0, height - 1)
                 sum += values[yy * width + xx]
