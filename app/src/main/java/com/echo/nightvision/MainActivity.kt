@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
                 var history by remember { mutableStateOf(HistoryStore.list(this@MainActivity)) }
                 var assets by remember { mutableStateOf(ImageLibraryStore.list(this@MainActivity)) }
                 var currentAssetPath by remember { mutableStateOf<String?>(null) }
+                var libraryStorageBytes by remember { mutableStateOf(ImageLibraryStore.storageBytes(this@MainActivity)) }
                 var autoProcessOnImport by remember { mutableStateOf(getSharedPreferences("nightvision_settings", MODE_PRIVATE).getBoolean("autoProcessOnImport", true)) }
                 var exportQuality by remember { mutableStateOf(getSharedPreferences("nightvision_settings", MODE_PRIVATE).getInt("exportQuality", 94)) }
                 var theme by remember {
@@ -86,6 +87,7 @@ class MainActivity : ComponentActivity() {
                                 ImageLibraryStore.save(this@MainActivity, "夜景照片", sourceType, image, uri)
                             }
                             assets = listOf(asset) + assets.filterNot { it.id == asset.id }
+                            libraryStorageBytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
                             currentAssetPath = asset.imagePath
                             source = image
                             params = if (autoProcessOnImport) ProcessParameters() else ProcessParameters(auto = false)
@@ -118,6 +120,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     history = withContext(Dispatchers.IO) { HistoryStore.list(this@MainActivity) }
                     assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
+                    libraryStorageBytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
                 }
 
                 NightVisionApp(
@@ -131,6 +134,7 @@ class MainActivity : ComponentActivity() {
                     busy = busy,
                     history = history,
                     assets = assets,
+                    libraryStorageBytes = libraryStorageBytes,
                     autoProcessOnImport = autoProcessOnImport,
                     exportQuality = exportQuality,
                     theme = theme,
@@ -282,6 +286,7 @@ class MainActivity : ComponentActivity() {
                                         ImageLibraryStore.save(this@MainActivity, "夜景处理结果", "处理结果", image)
                                     }
                                     assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
+                                    libraryStorageBytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
                                     message = "已保存到 Pictures/NightVision，并加入应用图片库。"
                                 } catch (error: Exception) {
                                     message = error.message ?: "保存失败，请重试。"
@@ -323,6 +328,7 @@ class MainActivity : ComponentActivity() {
                         scope.launch {
                             withContext(Dispatchers.IO) { ImageLibraryStore.delete(this@MainActivity, asset) }
                             assets = assets.filterNot { it.id == asset.id }
+                            libraryStorageBytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
                         }
                     },
                     onToggleFavorite = { asset ->
