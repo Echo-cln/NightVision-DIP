@@ -78,14 +78,13 @@ fun CameraScreen(
     val controller = remember(context) {
         LifecycleCameraController(context).apply {
             cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-            setEnabledUseCases(CameraController.PREVIEW or CameraController.IMAGE_CAPTURE)
+            setEnabledUseCases(CameraController.IMAGE_CAPTURE)
         }
     }
 
     LaunchedEffect(flashOn, hasPermission) {
         if (hasPermission) {
-            controller.imageCaptureFlashMode =
-                if (flashOn) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
+            controller.enableTorch(flashOn)
         }
     }
 
@@ -175,7 +174,7 @@ fun CameraScreen(
             )
             Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(color = Color.Black.copy(alpha = 0.48f), shape = CircleShape) {
+                    Surface(onClick = onBack, color = Color.Black.copy(alpha = 0.48f), shape = CircleShape) {
                         Text("‹", color = Color.White, fontSize = 28.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp))
                     }
                     Spacer(Modifier.width(10.dp))
