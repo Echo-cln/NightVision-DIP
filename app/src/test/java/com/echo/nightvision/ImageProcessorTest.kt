@@ -2,6 +2,8 @@ package com.echo.nightvision
 
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.ImageProcessor
+import com.echo.nightvision.processing.HslAdjustment
+import com.echo.nightvision.processing.ToneMethod
 import com.echo.nightvision.processing.PixelImage
 import com.echo.nightvision.processing.ProcessParameters
 import com.echo.nightvision.processing.ProcessingMode
@@ -92,6 +94,55 @@ class ImageProcessorTest {
         val result = ImageProcessor.process(source, ProcessingMode.ENHANCE, ProcessParameters())
         assertTrue(result.report.effectiveParameters.brightness > 0f)
         assertTrue(result.report.processed.mean > result.report.original.mean)
+    }
+
+    @Test
+    fun exposureAdjustmentRaisesMeanByApproximatelyOneStop() {
+        val source = PixelImage(4, 4, IntArray(16) { 0xFF282828.toInt() })
+        val result = ImageProcessor.process(
+            source, ProcessingMode.ENHANCE,
+            ProcessParameters(brightness = 0f, contrast = 0f, denoise = 0f, saturation = 100f, exposure = 1f, auto = false)
+        )
+        assertTrue(result.report.processed.mean > result.report.original.mean * 1.8)
+    }
+
+    @Test
+    fun shadowRecoveryLiftsDarkPixels() {
+        val source = PixelImage(4, 4, IntArray(16) { if (it < 8) 0xFF101010.toInt() else 0xFFB0B0B0.toInt() })
+        val result = ImageProcessor.process(
+            source, ProcessingMode.ENHANCE,
+            ProcessParameters(brightness = 0f, contrast = 0f, denoise = 0f, shadows = 80f, auto = false)
+        )
+        assertTrue(result.image.pixels[0] > source.pixels[0])
+        assertEquals(source.pixels[15], result.image.pixels[15])
+    }
+
+    @Test
+    fun redHslChannelChangesOnlyMatchingHueRange() {
+        val pixels = intArrayOf(0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt(), 0xFFFFFFFF.toInt())
+        val hsl = MutableList(8) { HslAdjustment() }
+        hsl[0] = HslAdjustment(hue = 80f, saturation = 0f, luminance = 0f)
+        val result = ImageProcessor.process(
+            PixelImage(2, 2, pixels), ProcessingMode.ENHANCE,
+            ProcessParameters(brightness = 0f, contrast = 0f, denoise = 0f, saturation = 100f, hslAdjustments = hsl, auto = false)
+        )
+        assertTrue(result.image.pixels[0] != pixels[0])
+        assertEquals(pixels[1], result.image.pixels[1])
+        assertEquals(pixels[2], result.image.pixels[2])
+    }
+
+    @Test
+    fun histogramEqualizationIsAvailableAsAnExplicitToneMethod() {
+        val pixels = IntArray(64) { index ->
+            val value = if (index < 56) 20 else 80
+            (0xFF000000.toInt() or (value shl 16) or (value shl 8) or value)
+        }
+        val result = ImageProcessor.process(
+            PixelImage(8, 8, pixels), ProcessingMode.ENHANCE,
+            ProcessParameters(brightness = 0f, contrast = 0f, denoise = 0f, toneMethod = ToneMethod.HISTOGRAM_EQUALIZATION, auto = false)
+        )
+        assertTrue(result.image.pixels.toSet().size >= 2)
+        assertEquals(64, result.report.processed.histogram.sum())
     }
 
 }
