@@ -306,8 +306,8 @@ private fun EditorScreen(
             if (result != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onSaveRecord) { Text("保存记录", color = accent, fontSize = 12.sp) }
-                    TextButton(onClick = onSave) { Text("导出图片", color = accent, fontSize = 12.sp) }
+                    TextButton(onClick = onSaveRecord, enabled = !busy) { Text("保存记录", color = accent, fontSize = 12.sp) }
+                    TextButton(onClick = onSave, enabled = !busy) { Text("导出图片", color = accent, fontSize = 12.sp) }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
