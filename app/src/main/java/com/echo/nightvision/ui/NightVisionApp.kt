@@ -318,7 +318,7 @@ private fun EditorScreen(
                 )
                 FilterChip(
                     selected = !params.auto,
-                    onClick = { onParams(params.copy(auto = false)) },
+                    onClick = { onParams((report?.effectiveParameters ?: params).copy(auto = false)) },
                     label = { Text("手动精修", fontSize = 11.sp) }
                 )
                 Spacer(Modifier.weight(1f))
