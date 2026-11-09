@@ -2,7 +2,7 @@ package com.echo.nightvision.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import com.echo.nightvision.processing.PixelImage
 import org.json.JSONArray
 import org.json.JSONObject
@@ -42,13 +42,17 @@ object HistoryStore {
         } catch (_: Exception) { emptyList() }
     }
 
-    fun save(context: Context, title: String, mode: String, original: PixelImage, result: PixelImage, summary: String, parametersJson: String = ""): HistoryItem {
+    fun save(context: Context, title: String, mode: String, original: PixelImage, result: PixelImage, summary: String, parametersJson: String = "", originalFilePath: String? = null): HistoryItem {
         val folder = File(context.filesDir, "nightvision-history")
         check(folder.exists() || folder.mkdirs()) { "无法创建本地记录目录" }
         val id = UUID.randomUUID().toString()
         val originalFile = File(folder, id + "-original.jpg")
         val resultFile = File(folder, id + "-result.jpg")
-        write(original, originalFile)
+        if (originalFilePath != null && File(originalFilePath).exists()) {
+            File(originalFilePath).copyTo(originalFile, overwrite = true)
+        } else {
+            write(original, originalFile)
+        }
         write(result, resultFile)
         val item = HistoryItem(id, title, mode, System.currentTimeMillis(), originalFile.absolutePath, resultFile.absolutePath, summary, parametersJson)
         val previous = list(context)
@@ -60,9 +64,22 @@ object HistoryStore {
     }
 
     fun load(item: HistoryItem): Pair<PixelImage, PixelImage>? {
-        val a = BitmapFactory.decodeFile(item.originalPath) ?: return null
-        val b = BitmapFactory.decodeFile(item.resultPath) ?: return null
+        val originalFile = File(item.originalPath)
+        val resultFile = File(item.resultPath)
+        if (!originalFile.exists() || !resultFile.exists()) return null
+        val a = decode(originalFile)
+        val b = decode(resultFile)
         return pixels(a) to pixels(b)
+    }
+
+    private fun decode(file: File): Bitmap {
+        return ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+            var sample = 1
+            val maxDimension = maxOf(info.size.width, info.size.height)
+            while (maxDimension / sample > 1800) sample *= 2
+            decoder.setTargetSampleSize(sample)
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
     }
 
     fun delete(context: Context, id: String) {
