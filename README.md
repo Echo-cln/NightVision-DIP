@@ -26,7 +26,7 @@ npm run dev
 ![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)
 ![Language](https://img.shields.io/badge/Language-Kotlin-7F52FF?logo=kotlin&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4)
-![Stage](https://img.shields.io/badge/Stage-S0%20%7C%20Development-orange)
+![Stage](https://img.shields.io/badge/Stage-S1%20%7C%20Native%20MVP-blue)
 ![License](https://img.shields.io/badge/License-TBD-lightgrey)
 
 [项目简介](#-项目简介) · [功能规划](#-功能规划) · [技术架构](#-技术架构) · [快速开始](#-快速开始) · [算法与实验](#-算法与实验) · [团队协作](#-团队协作)
@@ -213,12 +213,15 @@ GitHub Actions 在 `feat/android-native` 分支推送时执行单元测试和 De
 
 ## 🗺️ 开发里程碑
 
-- [x] **S0-1**：创建 Android 项目并通过本地 Debug 构建
-- [ ] **S0-2**：README、代码管理规范、真机启动检查
-- [ ] **S1**：基础图像输入、噪声模拟 / 滤波、空间域增强
-- [ ] **S2**：频域增强、运动模糊复原、色彩空间与白平衡
-- [ ] **S3**：自动策略、算法过程可视化、效果评价
-- [ ] **S4**：性能与鲁棒性测试、实验报告、答辩
+- [x] **S0-1**：创建 Android 工程并通过 Debug 构建
+- [x] **S0-2**：README、独立开发分支、GitHub Actions 构建流程
+- [x] **S1-1**：原生首页/编辑/记录页面、系统照片选择器与相机入口
+- [x] **S1-2**：Kotlin 像素处理、亮度/对比度/色彩调节、高斯/中值滤波
+- [x] **S1-3**：原图切换、拖动对比、直方图、本地记录与相册导出
+- [ ] **S1-4**：EXIF 方向适配、参考图 PSNR/SSIM、ROI 与频谱观察
+- [ ] **S2**：CLAHE、同态滤波、运动模糊 PSF 与维纳复原
+- [ ] **S3**：跨设备性能/鲁棒性测试、算法对照实验与质量评价
+- [ ] **S4**：实验报告、演示视频与答辩材料
 
 ## 📄 开源与使用说明
 
