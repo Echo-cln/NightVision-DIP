@@ -98,6 +98,7 @@ fun NightVisionApp(
     onViewMode: (ImageViewMode) -> Unit,
     onSplit: (Float) -> Unit,
     onSave: () -> Unit,
+    onSaveRecord: () -> Unit,
     onOpenHistory: (HistoryItem) -> Unit,
     onDeleteHistory: (HistoryItem) -> Unit,
     onClearHistory: () -> Unit
@@ -128,7 +129,7 @@ fun NightVisionApp(
             AppScreen.EDITOR -> EditorScreen(
                 Modifier.padding(padding), mode, source, result, report, parameters, busy,
                 accent, viewMode, split, message, onScreen, onPick, onCamera, onProcess,
-                onParameters, onViewMode, onSplit, onSave
+                onParameters, onViewMode, onSplit, onSave, onSaveRecord
             )
             AppScreen.LIBRARY -> LibraryScreen(Modifier.padding(padding), history, accent, onOpenHistory)
             AppScreen.HISTORY -> HistoryScreen(Modifier.padding(padding), history, accent, onOpenHistory, onDeleteHistory, onClearHistory)
@@ -251,7 +252,8 @@ private fun EditorScreen(
     onParams: (ProcessParameters) -> Unit,
     onViewMode: (ImageViewMode) -> Unit,
     onSplit: (Float) -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    onSaveRecord: () -> Unit
 ) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -290,7 +292,8 @@ private fun EditorScreen(
                     ViewChip("原图", viewMode == ImageViewMode.ORIGINAL) { onViewMode(ImageViewMode.ORIGINAL) }
                     ViewChip("拖动对比", viewMode == ImageViewMode.COMPARE) { onViewMode(ImageViewMode.COMPARE) }
                     Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onSave) { Text("保存", color = accent, fontSize = 12.sp) }
+                    TextButton(onClick = onSaveRecord) { Text("保存记录", color = accent, fontSize = 12.sp) }
+                    TextButton(onClick = onSave) { Text("导出图片", color = accent, fontSize = 12.sp) }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
