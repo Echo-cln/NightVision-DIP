@@ -20,6 +20,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.echo.nightvision.data.HistoryItem
 import com.echo.nightvision.data.HistoryStore
+import com.echo.nightvision.data.ImageAsset
+import com.echo.nightvision.data.ImageLibraryStore
 import com.echo.nightvision.processing.ImageProcessor
 import com.echo.nightvision.processing.PixelImage
 import com.echo.nightvision.processing.ProcessParameters
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
                 var params by remember { mutableStateOf(ProcessParameters()) }
                 var busy by remember { mutableStateOf(false) }
                 var history by remember { mutableStateOf(HistoryStore.list(this@MainActivity)) }
+                var assets by remember { mutableStateOf(ImageLibraryStore.list(this@MainActivity)) }
                 var theme by remember {
                     mutableStateOf(
                         runCatching {
@@ -74,6 +77,10 @@ class MainActivity : ComponentActivity() {
                             previewJob?.cancel()
                             previewVersion += 1
                             val image = withContext(Dispatchers.IO) { decodeImage(uri) }
+                            val asset = withContext(Dispatchers.IO) {
+                                ImageLibraryStore.save(this@MainActivity, "夜景照片", if (uri.scheme == "file") "现场拍摄" else "导入图片", image)
+                            }
+                            assets = listOf(asset) + assets.filterNot { it.id == asset.id }
                             source = image
                             params = ProcessParameters()
                             val processed = withContext(Dispatchers.Default) {
@@ -98,6 +105,7 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     history = withContext(Dispatchers.IO) { HistoryStore.list(this@MainActivity) }
+                    assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
                 }
 
                 NightVisionApp(
@@ -110,6 +118,7 @@ class MainActivity : ComponentActivity() {
                     parameters = params,
                     busy = busy,
                     history = history,
+                    assets = assets,
                     theme = theme,
                     viewMode = viewMode,
                     split = split,
@@ -239,14 +248,57 @@ class MainActivity : ComponentActivity() {
                             busy = true
                             scope.launch {
                                 try {
-                                    withContext(Dispatchers.IO) { saveImageToGallery(image) }
-                                    message = "已保存到 Pictures/NightVision。"
+                                    withContext(Dispatchers.IO) {
+                                        saveImageToGallery(image)
+                                        ImageLibraryStore.save(this@MainActivity, "夜景处理结果", "处理结果", image)
+                                    }
+                                    assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
+                                    message = "已保存到 Pictures/NightVision，并加入应用图片库。"
                                 } catch (error: Exception) {
                                     message = error.message ?: "保存失败，请重试。"
                                 } finally {
                                     busy = false
                                 }
                             }
+                        }
+                    },
+                    onOpenAsset = { asset: ImageAsset ->
+                        scope.launch {
+                            busy = true
+                            try {
+                                val image = withContext(Dispatchers.IO) { ImageLibraryStore.load(asset) }
+                                if (image != null) {
+                                    source = image
+                                    mode = ProcessingMode.ENHANCE
+                                    params = ProcessParameters()
+                                    val processed = withContext(Dispatchers.Default) {
+                                        ImageProcessor.process(image, mode, ProcessParameters())
+                                    }
+                                    result = processed.image
+                                    report = processed.report
+                                    viewMode = ImageViewMode.RESULT
+                                    screen = AppScreen.EDITOR
+                                    message = "已从图片库打开原图，并自动生成增强预览。"
+                                } else {
+                                    message = "图片文件已不存在或无法读取。"
+                                }
+                            } catch (error: Exception) {
+                                message = error.message ?: "无法打开图片。"
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                    onDeleteAsset = { asset ->
+                        scope.launch {
+                            withContext(Dispatchers.IO) { ImageLibraryStore.delete(this@MainActivity, asset) }
+                            assets = assets.filterNot { it.id == asset.id }
+                        }
+                    },
+                    onToggleFavorite = { asset ->
+                        scope.launch {
+                            withContext(Dispatchers.IO) { ImageLibraryStore.setFavorite(this@MainActivity, asset.id, !asset.favorite) }
+                            assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
                         }
                     },
                     onOpenHistory = { item: HistoryItem ->
