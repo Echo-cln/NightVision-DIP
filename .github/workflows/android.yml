@@ -1,0 +1,41 @@
+name: Android CI
+
+on:
+  push:
+    branches:
+      - feat/android-native
+  pull_request:
+    branches:
+      - main
+      - feat/mobile-web
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-37"
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightvision-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
