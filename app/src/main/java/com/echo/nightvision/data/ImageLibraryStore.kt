@@ -5,7 +5,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
 import com.echo.nightvision.processing.PixelImage
 import java.io.File
 import java.util.UUID
@@ -80,13 +81,27 @@ object ImageLibraryStore {
         }.also { db.close() }
     }
 
-    fun save(context: Context, title: String, sourceType: String, image: PixelImage): ImageAsset {
+    fun save(context: Context, title: String, sourceType: String, image: PixelImage, sourceUri: Uri? = null): ImageAsset {
         val folder = File(context.filesDir, "nightvision-library")
         check(folder.exists() || folder.mkdirs()) { "无法创建图片库目录。" }
         val id = UUID.randomUUID().toString()
-        val imageFile = File(folder, id + ".jpg")
+        val extension = sourceUri?.let { uri ->
+            when (context.contentResolver.getType(uri)?.lowercase()) {
+                "image/png" -> "png"
+                "image/webp" -> "webp"
+                "image/heic", "image/heif" -> "heic"
+                else -> "jpg"
+            }
+        } ?: "jpg"
+        val imageFile = File(folder, id + "." + extension)
         val thumbnailFile = File(folder, id + "-thumb.jpg")
-        writeJpeg(image, imageFile, 94, 0)
+        if (sourceUri != null) {
+            val input = context.contentResolver.openInputStream(sourceUri)
+                ?: error("无法读取原始图片文件。")
+            input.use { source -> imageFile.outputStream().use { destination -> source.copyTo(destination) } }
+        } else {
+            writeJpeg(image, imageFile, 94, 0)
+        }
         writeJpeg(image, thumbnailFile, 82, 360)
         val asset = ImageAsset(
             id = id,
@@ -123,7 +138,15 @@ object ImageLibraryStore {
     }
 
     fun load(asset: ImageAsset): PixelImage? {
-        val bitmap = BitmapFactory.decodeFile(asset.imagePath) ?: return null
+        val file = File(asset.imagePath)
+        if (!file.exists()) return null
+        val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+            var sample = 1
+            val maxDimension = maxOf(info.size.width, info.size.height)
+            while (maxDimension / sample > 1800) sample *= 2
+            decoder.setTargetSampleSize(sample)
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
         return try {
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
