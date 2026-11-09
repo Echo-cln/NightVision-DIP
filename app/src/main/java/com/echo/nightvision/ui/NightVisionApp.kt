@@ -35,6 +35,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -91,11 +92,15 @@ fun NightVisionApp(
     busy: Boolean,
     history: List<HistoryItem>,
     assets: List<ImageAsset>,
+    autoProcessOnImport: Boolean,
+    exportQuality: Int,
     theme: AppThemeChoice,
     viewMode: ImageViewMode,
     split: Float,
     message: String?,
     onTheme: (AppThemeChoice) -> Unit,
+    onAutoProcessOnImportChange: (Boolean) -> Unit,
+    onExportQualityChange: (Int) -> Unit,
     onScreen: (AppScreen) -> Unit,
     onMode: (ProcessingMode) -> Unit,
     onPick: () -> Unit,
@@ -145,7 +150,7 @@ fun NightVisionApp(
             )
             AppScreen.LIBRARY -> LibraryScreen(Modifier.padding(padding), assets, accent, onOpenAsset, onDeleteAsset, onToggleFavorite)
             AppScreen.HISTORY -> HistoryScreen(Modifier.padding(padding), history, accent, onOpenHistory, onDeleteHistory, onClearHistory)
-            AppScreen.PROFILE -> ProfileScreen(Modifier.padding(padding), theme, onTheme, accent, history.size, assets.size)
+            AppScreen.PROFILE -> ProfileScreen(Modifier.padding(padding), theme, onTheme, accent, history.size, assets.size, autoProcessOnImport, exportQuality, onAutoProcessOnImportChange, onExportQualityChange)
         }
     }
 }
@@ -586,7 +591,11 @@ private fun ProfileScreen(
     onTheme: (AppThemeChoice) -> Unit,
     accent: Color,
     recordCount: Int,
-    assetCount: Int
+    assetCount: Int,
+    autoProcessOnImport: Boolean,
+    exportQuality: Int,
+    onAutoProcessOnImportChange: (Boolean) -> Unit,
+    onExportQualityChange: (Int) -> Unit
 ) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("我的", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
@@ -611,6 +620,29 @@ private fun ProfileScreen(
                     ThemeChip("莓酒红", theme == AppThemeChoice.BERRY, Rose) { onTheme(AppThemeChoice.BERRY) }
                     ThemeChip("暖棕金", theme == AppThemeChoice.AMBER, Amber) { onTheme(AppThemeChoice.AMBER) }
                 }
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("处理偏好", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("导入后自动增强", color = Ink, fontSize = 12.sp)
+                        Text("关闭后先进入原图与手动精修工作区。", color = Muted, fontSize = 10.sp)
+                    }
+                    Switch(checked = autoProcessOnImport, onCheckedChange = onAutoProcessOnImportChange)
+                }
+                HorizontalDivider(color = Line)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("默认 JPEG 导出质量", color = Ink, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    Text(exportQuality.toString(), color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Slider(
+                    value = exportQuality.toFloat().coerceIn(85f, 100f),
+                    onValueChange = { onExportQualityChange(it.toInt()) },
+                    valueRange = 85f..100f
+                )
+                Text("质量越高，文件体积通常越大。原始图片与应用内处理结果不会因导出设置而改变。", color = Muted, fontSize = 10.sp)
             }
         }
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
