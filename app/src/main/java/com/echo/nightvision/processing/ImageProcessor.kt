@@ -4,6 +4,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 enum class ProcessingMode { ENHANCE, RESTORE }
@@ -142,7 +143,7 @@ object ImageProcessor {
 
         val localLumaClarity = localMeanLuma(source, 2)
         val localLumaTexture = localMeanLuma(source, 1)
-        val sharpenRadius = p.sharpenRadius.toInt().coerceIn(1, 3)
+        val sharpenRadius = p.sharpenRadius.roundToInt().coerceIn(1, 3)
         val localLumaSharpen = localMeanLuma(source, sharpenRadius)
         val histogramLut = if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) histogramLut(source) else null
         val channelAverage = before.channelMeans.average()
