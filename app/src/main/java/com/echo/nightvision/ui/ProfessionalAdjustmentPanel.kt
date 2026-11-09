@@ -33,6 +33,7 @@ import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.HslAdjustment
 import com.echo.nightvision.processing.ProcessParameters
 import com.echo.nightvision.processing.ToneMethod
+import com.echo.nightvision.processing.ToneCurve
 import java.util.Locale
 
 private enum class AdjustmentGroup(val title: String) {
@@ -78,7 +79,7 @@ fun ProfessionalAdjustmentPanel(
                             AdjustmentGroup.LIGHT -> parameters.copy(
                                 brightness = 0f, contrast = 0f, exposure = 0f, highlights = 0f,
                                 shadows = 0f, whites = 0f, blacks = 0f, gamma = 100f,
-                                curveShadows = 0f, curveMidtones = 0f, curveHighlights = 0f
+                                curveShadows = 0f, curveMidtones = 0f, curveHighlights = 0f, toneCurve = ToneCurve()
                             )
                             AdjustmentGroup.COLOR -> parameters.copy(
                                 temperature = 0f, tint = 0f, saturation = 100f, vibrance = 0f,
@@ -138,16 +139,10 @@ fun ProfessionalAdjustmentPanel(
                         update(parameters.copy(gamma = it))
                     }
                     HorizontalDivider(color = Color(0xFFE8EEEA))
-                    Text("参数化色调曲线", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                    Text("分别控制暗部、中间调和高光的曲线偏移；后续可扩展为可拖动控制点曲线。", color = Color(0xFF788A83), fontSize = 10.sp)
-                    AdjustmentSlider("曲线 · 暗部", parameters.curveShadows, -100f..100f, "", accent) {
-                        update(parameters.copy(curveShadows = it))
-                    }
-                    AdjustmentSlider("曲线 · 中间调", parameters.curveMidtones, -100f..100f, "", accent) {
-                        update(parameters.copy(curveMidtones = it))
-                    }
-                    AdjustmentSlider("曲线 · 高光", parameters.curveHighlights, -100f..100f, "", accent) {
-                        update(parameters.copy(curveHighlights = it))
+                    Text("色调曲线", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Text("RGB 总曲线与红、绿、蓝独立通道。拖动控制点建立非线性映射。", color = Color(0xFF788A83), fontSize = 10.sp)
+                    ToneCurveEditor(parameters.toneCurve, accent) {
+                        update(parameters.copy(toneCurve = it))
                     }
                 }
 
