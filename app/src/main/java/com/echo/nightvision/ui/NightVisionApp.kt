@@ -379,29 +379,19 @@ private fun ImageComparison(
     Surface(color = Color(0xFF172522), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().height(265.dp)) {
         Box(Modifier.fillMaxSize()) {
             when (mode) {
-                ImageViewMode.ORIGINAL -> Image(
-                    originalBitmap,
-                    "原图",
-                    modifier = Modifier.fillMaxSize().pointerInput(mode, resultBitmap) {
-                        detectTapGestures(onPress = {
-                            if (resultBitmap != null && mode == ImageViewMode.RESULT) {
-                                latestOnViewMode.value(ImageViewMode.ORIGINAL)
-                                tryAwaitRelease()
-                                latestOnViewMode.value(ImageViewMode.RESULT)
-                            }
-                        })
-                    }
-                )
+                ImageViewMode.ORIGINAL -> Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
                 ImageViewMode.RESULT -> if (resultBitmap != null) {
                     Image(
                         resultBitmap,
                         "处理结果",
                         modifier = Modifier.fillMaxSize().pointerInput(resultBitmap) {
-                            detectTapGestures(onPress = {
-                                latestOnViewMode.value(ImageViewMode.ORIGINAL)
-                                tryAwaitRelease()
-                                latestOnViewMode.value(ImageViewMode.RESULT)
-                            })
+                            detectTapGestures(
+                                onLongPress = { latestOnViewMode.value(ImageViewMode.ORIGINAL) },
+                                onPress = {
+                                    tryAwaitRelease()
+                                    latestOnViewMode.value(ImageViewMode.RESULT)
+                                }
+                            )
                         }
                     )
                 } else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
