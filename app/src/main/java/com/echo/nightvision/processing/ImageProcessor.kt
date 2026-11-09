@@ -47,7 +47,7 @@ data class ProcessParameters(
     val shadows: Float = 0f,
     val whites: Float = 0f,
     val blacks: Float = 0f,
-    val gamma: Float = 100f,
+    val gamma: Float = 1f,
     val tint: Float = 0f,
     val vibrance: Float = 0f,
     val clarity: Float = 0f,
@@ -148,7 +148,7 @@ object ImageProcessor {
         val histogramLut = if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) histogramLut(source) else null
         val channelAverage = before.channelMeans.average()
         val wb = before.channelMeans.map { (channelAverage / max(1.0, it)).coerceIn(0.75, 1.3) }
-        val gamma = (p.gamma / 100.0).coerceIn(0.2, 3.0)
+        val gamma = p.gamma.coerceIn(0.2f, 3.0f).toDouble()
         val gain = (1.0 + p.contrast * 0.003).coerceIn(0.55, 1.55)
         val exposureGain = 2.0.pow(p.exposure.coerceIn(-5f, 5f).toDouble())
         val saturation = (p.saturation / 100.0).coerceIn(0.0, 2.0)
@@ -319,7 +319,7 @@ object ImageProcessor {
             exposure = if (stats.mean < 65.0) 0.35f else 0f,
             shadows = if (stats.darkPercent > 35) 18f else 8f,
             highlights = if (stats.highlightPercent > 8) -16f else 0f,
-            gamma = 100f,
+            gamma = 1f,
             whiteBalance = mode == ProcessingMode.RESTORE
         )
     }
