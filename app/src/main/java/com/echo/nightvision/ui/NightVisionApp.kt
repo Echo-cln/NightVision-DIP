@@ -1,6 +1,7 @@
 package com.echo.nightvision.ui
 
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.LifecycleOwner
 import com.echo.nightvision.data.HistoryItem
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.ImageStats
@@ -70,12 +72,13 @@ private val Amber = Color(0xFF8A6332)
 private val RoseSoft = Color(0xFFF7EDF1)
 private val AmberSoft = Color(0xFFF7F0E6)
 
-enum class AppScreen { HOME, EDITOR, LIBRARY, HISTORY, PROFILE }
+enum class AppScreen { HOME, EDITOR, CAMERA, LIBRARY, HISTORY, PROFILE }
 enum class ImageViewMode { RESULT, ORIGINAL, COMPARE }
 enum class AppThemeChoice { GREEN, BERRY, AMBER }
 
 @Composable
 fun NightVisionApp(
+    lifecycleOwner: LifecycleOwner,
     screen: AppScreen,
     mode: ProcessingMode,
     source: PixelImage?,
@@ -93,6 +96,7 @@ fun NightVisionApp(
     onMode: (ProcessingMode) -> Unit,
     onPick: () -> Unit,
     onCamera: () -> Unit,
+    onCameraPhoto: (Uri) -> Unit,
     onProcess: () -> Unit,
     onParameters: (ProcessParameters) -> Unit,
     onViewMode: (ImageViewMode) -> Unit,
@@ -116,7 +120,7 @@ fun NightVisionApp(
     Scaffold(
         containerColor = Page,
         bottomBar = {
-            if (screen != AppScreen.EDITOR) NavigationBar(containerColor = Color.White) {
+            if (screen != AppScreen.EDITOR && screen != AppScreen.CAMERA) NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(screen == AppScreen.HOME, { onScreen(AppScreen.HOME) }, icon = { Text("⌂") }, label = { Text("首页") })
                 NavigationBarItem(screen == AppScreen.LIBRARY, { onScreen(AppScreen.LIBRARY) }, icon = { Text("▧") }, label = { Text("图片库") })
                 NavigationBarItem(screen == AppScreen.HISTORY, { onScreen(AppScreen.HISTORY) }, icon = { Text("◷") }, label = { Text("记录") })
@@ -126,6 +130,7 @@ fun NightVisionApp(
     ) { padding ->
         when (screen) {
             AppScreen.HOME -> HomeScreen(Modifier.padding(padding), history, theme, accent, soft, onTheme, onMode, onScreen)
+            AppScreen.CAMERA -> CameraScreen(lifecycleOwner, { onScreen(AppScreen.EDITOR) }, onCameraPhoto)
             AppScreen.EDITOR -> EditorScreen(
                 Modifier.padding(padding), mode, source, result, report, parameters, busy,
                 accent, viewMode, split, message, onScreen, onPick, onCamera, onProcess,
