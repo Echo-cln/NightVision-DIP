@@ -56,6 +56,8 @@ fun encodeProcessParameters(parameters: ProcessParameters): String {
         .put("curveMidtones", parameters.curveMidtones)
         .put("curveHighlights", parameters.curveHighlights)
         .put("toneMethod", parameters.toneMethod.name)
+        .put("claheClipLimit", parameters.claheClipLimit)
+        .put("claheTiles", parameters.claheTiles)
         .put("whiteBalance", parameters.whiteBalance)
         .put("hslAdjustments", hsl)
         .put("toneCurve", toneCurve)
@@ -131,6 +133,8 @@ fun decodeProcessParameters(raw: String?): ProcessParameters? {
                 ToneMethod.valueOf(json.optString("toneMethod", ToneMethod.GAMMA.name))
             }.getOrDefault(ToneMethod.GAMMA),
             whiteBalance = json.optBoolean("whiteBalance", false),
+            claheClipLimit = json.optDouble("claheClipLimit", 2.0).toFloat().coerceIn(0.5f, 8f),
+            claheTiles = json.optInt("claheTiles", 8).coerceIn(2, 16),
             hslAdjustments = hsl,
             toneCurve = curve
         )
