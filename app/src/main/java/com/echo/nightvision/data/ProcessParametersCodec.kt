@@ -52,6 +52,11 @@ fun encodeProcessParameters(parameters: ProcessParameters): String {
         .put("denoiseDetail", parameters.denoiseDetail)
         .put("bilateralSpatialSigma", parameters.bilateralSpatialSigma)
         .put("bilateralRangeSigma", parameters.bilateralRangeSigma)
+        .put("motionDeblurEnabled", parameters.motionDeblurEnabled)
+        .put("motionLengthPx", parameters.motionLengthPx)
+        .put("motionAngleDegrees", parameters.motionAngleDegrees)
+        .put("wienerRegularization", parameters.wienerRegularization)
+        .put("motionStrength", parameters.motionStrength)
         .put("colorDenoise", parameters.colorDenoise)
         .put("vignette", parameters.vignette)
         .put("curveShadows", parameters.curveShadows)
@@ -128,6 +133,11 @@ fun decodeProcessParameters(raw: String?): ProcessParameters? {
             denoiseDetail = json.optDouble("denoiseDetail", 50.0).toFloat(),
             bilateralSpatialSigma = json.optDouble("bilateralSpatialSigma", 1.2).toFloat().coerceIn(0.7f, 3f),
             bilateralRangeSigma = json.optDouble("bilateralRangeSigma", 25.0).toFloat().coerceIn(2f, 100f),
+            motionDeblurEnabled = json.optBoolean("motionDeblurEnabled", false),
+            motionLengthPx = json.optDouble("motionLengthPx", 12.0).toFloat().coerceIn(0.25f, 64f),
+            motionAngleDegrees = json.optDouble("motionAngleDegrees", 0.0).toFloat().coerceIn(-90f, 90f),
+            wienerRegularization = json.optDouble("wienerRegularization", 0.01).toFloat().coerceIn(0.001f, 0.1f),
+            motionStrength = json.optDouble("motionStrength", 85.0).toFloat().coerceIn(0f, 100f),
             colorDenoise = json.optDouble("colorDenoise", 0.0).toFloat(),
             vignette = json.optDouble("vignette", 0.0).toFloat(),
             curveShadows = json.optDouble("curveShadows", 0.0).toFloat(),

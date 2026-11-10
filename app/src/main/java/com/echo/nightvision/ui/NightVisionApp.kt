@@ -398,7 +398,7 @@ private fun EditorScreen(
                         }
                     }
                 } else {
-                    ProfessionalAdjustmentPanel(params, accent, onParams)
+                    ProfessionalAdjustmentPanel(params, mode, accent, onParams)
                     if (result == null) Button(onClick = onProcess, enabled = !busy,
                         colors = ButtonDefaults.buttonColors(containerColor = accent),
                         modifier = Modifier.fillMaxWidth()) {
