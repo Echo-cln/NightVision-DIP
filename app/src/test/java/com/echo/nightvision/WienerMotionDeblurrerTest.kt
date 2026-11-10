@@ -146,4 +146,28 @@ class WienerMotionDeblurrerTest {
         }
         return sum / expected.size
     }
+    @Test
+    fun highResolutionInputUsesBoundedWorkingGridAndKeepsOriginalDimensions() {
+        val width = 1800
+        val height = 900
+        val source = PixelImage(
+            width, height,
+            IntArray(width * height) { index ->
+                val value = if ((index % width) in 700..900) 150 else 45
+                0xFF000000.toInt() or (value shl 16) or (value shl 8) or value
+            }
+        )
+        val result = WienerMotionDeblurrer.restore(
+            source, motionLengthPx = 20f, angleDegrees = 0f,
+            regularization = 0.02f, strength = 60f
+        )
+        assertEquals(896, result.workingWidth)
+        assertEquals(448, result.workingHeight)
+        assertEquals(width, result.image.width)
+        assertEquals(height, result.image.height)
+        assertTrue(result.fftWidth <= 1024)
+        assertTrue(result.fftHeight <= 512)
+        assertTrue(kotlin.math.abs(result.effectiveMotionLength - 20f * 896f / width) < 0.01f)
+    }
+
 }
