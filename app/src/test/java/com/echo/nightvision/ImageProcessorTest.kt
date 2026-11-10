@@ -238,4 +238,16 @@ class ImageProcessorTest {
         assertTrue(source[centerIndex] != actual)
     }
 
+    @Test
+    fun uniformClaheTilesDoNotInventContrast() {
+        val pixel = 0xFF303030.toInt()
+        val image = PixelImage(16, 16, IntArray(256) { pixel })
+        val output = ImageProcessor.process(
+            image, ProcessingMode.ENHANCE,
+            ProcessParameters(denoise = 0f, auto = false, toneMethod = ToneMethod.CLAHE,
+                claheClipLimit = 2f, claheTiles = 4)
+        )
+        assertTrue(output.image.pixels.all { it == pixel })
+    }
+
 }
