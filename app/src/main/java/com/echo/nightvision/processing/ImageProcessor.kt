@@ -9,7 +9,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 enum class ProcessingMode { ENHANCE, RESTORE }
-enum class DenoiseMethod { GAUSSIAN, MEDIAN, BILATERAL }
+enum class DenoiseMethod { GAUSSIAN, MEDIAN, BILATERAL, MEAN }
 enum class ToneMethod { GAMMA, HISTOGRAM_EQUALIZATION, CLAHE }
 
 data class HslAdjustment(
@@ -290,6 +290,7 @@ object ImageProcessor {
             }
             if (p.denoise > 0f) add(ProcessingStep(
                 when (p.denoiseMethod) {
+                    DenoiseMethod.MEAN -> "3×3 明度均值滤波"
                     DenoiseMethod.MEDIAN -> "3×3 明度中值滤波"
                     DenoiseMethod.BILATERAL -> "明度双边滤波"
                     DenoiseMethod.GAUSSIAN -> "3×3 明度高斯滤波"
@@ -536,7 +537,9 @@ object ImageProcessor {
                     val yy = (y + dy).coerceIn(0, height - 1)
                     neighborhood[cursor++] = luminance[yy * width + xx]
                 }
-                if (method == DenoiseMethod.MEDIAN) {
+                if (method == DenoiseMethod.MEAN) {
+                    neighborhood.sum().toDouble() / 9.0
+                } else if (method == DenoiseMethod.MEDIAN) {
                     neighborhood.sort()
                     neighborhood[4].toDouble()
                 } else {

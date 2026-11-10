@@ -13,6 +13,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ImageProcessorTest {
+    @Test fun meanFilterMatchesImpulseAndStrength() {
+        val pixels = IntArray(9) { 0x7F000000 }; pixels[4] = 0x7F909090
+        val source = PixelImage(3, 3, pixels)
+        fun run(strength: Float) = ImageProcessor.process(source, ProcessingMode.RESTORE,
+            ProcessParameters(auto = false, denoise = strength, denoiseDetail = 0f,
+                denoiseMethod = DenoiseMethod.MEAN)).image
+        assertEquals(16, run(100f).pixels[4] and 255)
+        assertEquals(80, run(50f).pixels[4] and 255)
+        assertEquals(pixels.toList(), run(0f).pixels.toList())
+        assertTrue(run(100f).pixels.all { it ushr 24 == 127 })
+        assertEquals(0x7F909090, pixels[4])
+    }
+
     @Test
     fun neutralParametersPreserveGrayPixels() {
         val pixels = intArrayOf(0xFF101010.toInt(), 0xFF404040.toInt(), 0xFF808080.toInt(), 0xFFC0C0C0.toInt())

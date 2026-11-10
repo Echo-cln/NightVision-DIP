@@ -3,7 +3,9 @@ name: Android CI
 on:
   push:
     branches:
+      - main
       - feat/android-native
+      - feat/android-mean-denoise
   pull_request:
     branches:
       - main
