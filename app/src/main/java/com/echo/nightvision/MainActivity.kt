@@ -80,7 +80,12 @@ class MainActivity : ComponentActivity() {
 
                 // One cancellable pipeline owns image state. A late import, mode switch or
                 // preview is never allowed to replace a newer image or enable stale export.
-                fun invalidateImageTask() {
+                fun invalidateImageTask(discardPending: Boolean = false) {
+                    if (discardPending && busy && !saving) {
+                        // A cancelled 720px preview is not an exportable result.
+                        result = null
+                        report = null
+                    }
                     previewVersion += 1
                     previewJob?.cancel()
                     busy = false
@@ -172,7 +177,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onScreen = {
                         if (!saving) {
-                            if (it != screen) invalidateImageTask()
+                            if (it != screen) invalidateImageTask(discardPending = true)
                             screen = it
                         }
                     },
@@ -189,7 +194,7 @@ class MainActivity : ComponentActivity() {
                         viewMode = ImageViewMode.COMPARE
                     },
                     onPick = { if (!saving) photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                    onCamera = { if (!saving) { invalidateImageTask(); screen = AppScreen.CAMERA } },
+                    onCamera = { if (!saving) { invalidateImageTask(discardPending = true); screen = AppScreen.CAMERA } },
                     onCameraPhoto = { uri -> loadImage(uri, "现场拍摄") },
                     onProcess = {
                         val input = source
