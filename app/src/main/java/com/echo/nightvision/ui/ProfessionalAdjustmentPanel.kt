@@ -89,7 +89,7 @@ fun ProfessionalAdjustmentPanel(
                                 clarity = 0f, texture = 0f, sharpening = 0f, sharpenRadius = 1f, sharpenDetail = 50f, sharpenMasking = 0f, denoise = 0f, denoiseDetail = 50f, colorDenoise = 0f
                             )
                             AdjustmentGroup.EFFECTS -> parameters.copy(vignette = 0f)
-                            AdjustmentGroup.ALGORITHM -> parameters.copy(toneMethod = ToneMethod.GAMMA)
+                            AdjustmentGroup.ALGORITHM -> parameters.copy(toneMethod = ToneMethod.GAMMA, claheClipLimit = 2f, claheTiles = 8)
                         }
                     )
                 }) {
@@ -271,14 +271,29 @@ fun ProfessionalAdjustmentPanel(
                         onClick = { update(parameters.copy(toneMethod = ToneMethod.HISTOGRAM_EQUALIZATION)) },
                         label = { Text("直方图均衡化") }
                     )
+                    FilterChip(
+                        selected = parameters.toneMethod == ToneMethod.CLAHE,
+                        onClick = { update(parameters.copy(toneMethod = ToneMethod.CLAHE)) },
+                        label = { Text("CLAHE 局部均衡") }
+                    )
+                    if (parameters.toneMethod == ToneMethod.CLAHE) {
+                        AdjustmentSlider("对比度裁剪阈值", parameters.claheClipLimit, 0.5f..8f, "", accent) {
+                            update(parameters.copy(claheClipLimit = it))
+                        }
+                        AdjustmentSlider("局部网格", parameters.claheTiles.toFloat(), 2f..16f, "×", accent) {
+                            update(parameters.copy(claheTiles = it.toInt().coerceIn(2, 16)))
+                        }
+                        Text("先裁剪各局部灰度直方图，再双线性插值合成连续映射。数值越大，局部对比越强，也可能放大噪声。",
+                             color = Color(0xFF788A83), fontSize = 10.sp)
+                    }
                     HorizontalDivider(color = Color(0xFFE8EEEA))
                     Text("专业算法实验室", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Text(
-                        "CLAHE、Retinex、同态滤波、双边滤波、非局部均值、Laplacian 锐化和 Wiener 运动模糊复原属于独立算法模块。完成算法实现和验证后再开放参数，避免出现调节了却没有效果的伪功能。",
+                        "Retinex、同态滤波、双边滤波、非局部均值、Laplacian 锐化和 Wiener 运动模糊复原将作为后续独立算法模块。完成算法实现和验证后才开放参数，避免出现无效控制。",
                         color = Color(0xFF788A83), fontSize = 10.sp, lineHeight = 16.sp
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("CLAHE · 待接入") })
+                        FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("双边滤波 · 待接入") })
                         FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("Retinex · 待接入") })
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
