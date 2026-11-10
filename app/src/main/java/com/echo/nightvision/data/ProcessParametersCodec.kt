@@ -1,5 +1,6 @@
 package com.echo.nightvision.data
 
+import com.echo.nightvision.processing.LuminanceSpace
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.HslAdjustment
 import com.echo.nightvision.processing.ProcessParameters
@@ -28,6 +29,9 @@ fun encodeProcessParameters(parameters: ProcessParameters): String {
         .put("blue", curve(parameters.toneCurve.blue))
 
     return JSONObject()
+        .put("luminanceSpace", parameters.luminanceSpace.name)
+        .put("claheStrength", parameters.claheStrength)
+        .put("protectBlack", parameters.protectBlack)
         .put("brightness", parameters.brightness)
         .put("contrast", parameters.contrast)
         .put("denoise", parameters.denoise)
@@ -102,6 +106,9 @@ fun decodeProcessParameters(raw: String?): ProcessParameters? {
             blue = readCurve("blue", identity.blue)
         )
         ProcessParameters(
+            luminanceSpace = runCatching { LuminanceSpace.valueOf(json.optString("luminanceSpace", "YCBCR")) }.getOrDefault(LuminanceSpace.YCBCR),
+            protectBlack = json.optBoolean("protectBlack", false),
+            claheStrength = json.optDouble("claheStrength", 100.0).toFloat().coerceIn(0f, 100f),
             brightness = json.optDouble("brightness", 0.0).toFloat(),
             contrast = json.optDouble("contrast", 0.0).toFloat(),
             denoise = json.optDouble("denoise", 18.0).toFloat(),

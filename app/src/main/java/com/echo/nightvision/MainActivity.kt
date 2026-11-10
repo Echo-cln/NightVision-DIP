@@ -34,6 +34,7 @@ import com.echo.nightvision.ui.AppThemeChoice
 import com.echo.nightvision.ui.ImageViewMode
 import com.echo.nightvision.ui.NightVisionApp
 import com.echo.nightvision.ui.theme.NightVisionTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -53,10 +54,11 @@ class MainActivity : ComponentActivity() {
                 var report by remember { mutableStateOf<com.echo.nightvision.processing.ProcessingReport?>(null) }
                 var params by remember { mutableStateOf(ProcessParameters()) }
                 var busy by remember { mutableStateOf(false) }
-                var history by remember { mutableStateOf(HistoryStore.list(this@MainActivity)) }
-                var assets by remember { mutableStateOf(ImageLibraryStore.list(this@MainActivity)) }
+                var saving by remember { mutableStateOf(false) }
+                var history by remember { mutableStateOf<List<HistoryItem>>(emptyList()) }
+                var assets by remember { mutableStateOf<List<ImageAsset>>(emptyList()) }
                 var currentAssetPath by remember { mutableStateOf<String?>(null) }
-                var libraryStorageBytes by remember { mutableStateOf(ImageLibraryStore.storageBytes(this@MainActivity)) }
+                var libraryStorageBytes by remember { mutableStateOf(0L) }
                 var autoProcessOnImport by remember { mutableStateOf(getSharedPreferences("nightvision_settings", MODE_PRIVATE).getBoolean("autoProcessOnImport", true)) }
                 var exportQuality by remember { mutableStateOf(getSharedPreferences("nightvision_settings", MODE_PRIVATE).getInt("exportQuality", 94)) }
                 var theme by remember {
@@ -69,47 +71,58 @@ class MainActivity : ComponentActivity() {
                         }.getOrDefault(AppThemeChoice.GREEN)
                     )
                 }
-                var viewMode by remember { mutableStateOf(ImageViewMode.RESULT) }
+                var viewMode by remember { mutableStateOf(ImageViewMode.COMPARE) }
                 var split by remember { mutableStateOf(0.5f) }
                 var message by remember { mutableStateOf<String?>(null) }
                 var previewJob by remember { mutableStateOf<Job?>(null) }
                 var previewVersion by remember { mutableStateOf(0) }
                 val scope = rememberCoroutineScope()
 
+                // One cancellable pipeline owns image state. A late import, mode switch or
+                // preview is never allowed to replace a newer image or enable stale export.
+                fun invalidateImageTask() {
+                    previewVersion += 1
+                    previewJob?.cancel()
+                    busy = false
+                }
+                fun runImageTask(block: suspend (Int) -> Unit) {
+                    invalidateImageTask()
+                    val version = previewVersion
+                    busy = true
+                    message = null
+                    previewJob = scope.launch {
+                        try { block(version) }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (error: Exception) {
+                            if (version == previewVersion) message = error.message ?: "图片处理失败，请重试。"
+                        } finally {
+                            if (version == previewVersion) busy = false
+                        }
+                    }
+                }
                 fun loadImage(uri: Uri, sourceType: String = "导入图片") {
-                    scope.launch {
-                        busy = true
-                        message = null
-                        try {
-                            previewJob?.cancel()
-                            previewVersion += 1
-                            val image = withContext(Dispatchers.IO) { decodeImage(uri) }
-                            val asset = withContext(Dispatchers.IO) {
-                                ImageLibraryStore.save(this@MainActivity, importedImageName(uri), sourceType, image, uri)
-                            }
-                            assets = listOf(asset) + assets.filterNot { it.id == asset.id }
-                            libraryStorageBytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
+                    val selectedMode = mode
+                    val automatic = autoProcessOnImport
+                    runImageTask { version ->
+                        val image = withContext(Dispatchers.IO) { decodeImage(uri) }
+                        val asset = withContext(Dispatchers.IO) {
+                            ImageLibraryStore.save(this@MainActivity, importedImageName(uri), sourceType, image, uri)
+                        }
+                        val library = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
+                        val bytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
+                        val processed = if (automatic) withContext(Dispatchers.Default) {
+                            ImageProcessor.process(image, selectedMode, ProcessParameters())
+                        } else null
+                        if (version == previewVersion) {
+                            assets = library
+                            libraryStorageBytes = bytes
                             currentAssetPath = asset.imagePath
                             source = image
-                            params = if (autoProcessOnImport) ProcessParameters() else ProcessParameters(auto = false)
-                            if (autoProcessOnImport) {
-                                val processed = withContext(Dispatchers.Default) {
-                                    ImageProcessor.process(image, mode, ProcessParameters())
-                                }
-                                result = processed.image
-                                report = processed.report
-                                viewMode = ImageViewMode.RESULT
-                            } else {
-                                result = null
-                                report = null
-                                viewMode = ImageViewMode.ORIGINAL
-                            }
-                            split = 0.5f
+                            params = ProcessParameters(auto = automatic)
+                            result = processed?.image
+                            report = processed?.report
+                            viewMode = if (processed == null) ImageViewMode.ORIGINAL else ImageViewMode.COMPARE
                             screen = AppScreen.EDITOR
-                        } catch (error: Exception) {
-                            message = error.message ?: "图片读取失败，请换一张图片重试。"
-                        } finally {
-                            busy = false
                         }
                     }
                 }
@@ -157,90 +170,67 @@ class MainActivity : ComponentActivity() {
                         getSharedPreferences("nightvision_settings", MODE_PRIVATE)
                             .edit().putInt("exportQuality", exportQuality).apply()
                     },
-                    onScreen = { screen = it },
-                    onMode = {
-                        mode = it
-                        params = ProcessParameters()
-                        val input = source
-                        if (input != null) {
-                            previewJob?.cancel()
-                            previewVersion += 1
-                            val version = previewVersion
-                            scope.launch {
-                                val processed = withContext(Dispatchers.Default) {
-                                    ImageProcessor.process(input, it, ProcessParameters())
-                                }
-                                if (version == previewVersion) {
-                                    result = processed.image
-                                    report = processed.report
-                                    viewMode = ImageViewMode.RESULT
-                                }
-                            }
+                    onScreen = {
+                        if (!saving) {
+                            if (it != screen) invalidateImageTask()
+                            screen = it
                         }
                     },
-                    onPick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                    onCamera = { screen = AppScreen.CAMERA },
+                    onMode = modeChange@ { selectedMode ->
+                        if (saving) return@modeChange
+                        invalidateImageTask()
+                        mode = selectedMode
+                        params = ProcessParameters()
+                        // Entering either home module starts its own import/camera flow.
+                        source = null
+                        result = null
+                        report = null
+                        currentAssetPath = null
+                        viewMode = ImageViewMode.COMPARE
+                    },
+                    onPick = { if (!saving) photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onCamera = { if (!saving) { invalidateImageTask(); screen = AppScreen.CAMERA } },
                     onCameraPhoto = { uri -> loadImage(uri, "现场拍摄") },
                     onProcess = {
                         val input = source
                         if (input != null && !busy) {
-                            previewJob?.cancel()
-                            previewVersion += 1
-                            busy = true
-                            message = null
                             val requested = params
-                            scope.launch {
-                                try {
-                                    val processed = withContext(Dispatchers.Default) {
-                                        ImageProcessor.process(input, mode, requested)
-                                    }
+                            val selectedMode = mode
+                            runImageTask { version ->
+                                val processed = withContext(Dispatchers.Default) {
+                                    ImageProcessor.process(input, selectedMode, requested)
+                                }
+                                if (version == previewVersion) {
                                     result = processed.image
                                     report = processed.report
-                                    viewMode = ImageViewMode.RESULT
-                                    message = "处理完成。原图保持独立，结果可单独导出或保存记录。"
-                                } catch (error: Exception) {
-                                    message = error.message ?: "图像处理失败，请重试。"
-                                } finally {
-                                    busy = false
+                                    viewMode = ImageViewMode.COMPARE
                                 }
                             }
                         }
                     },
-                    onParameters = { next ->
+                    onParameters = adjust@ { next ->
+                        if (saving) return@adjust
                         params = next
                         val input = source
-                        if (input != null) {
-                            previewVersion += 1
-                            val version = previewVersion
-                            previewJob?.cancel()
-                            busy = true
-                            previewJob = scope.launch {
-                                try {
-                                    delay(90)
-                                    val previewInput = withContext(Dispatchers.Default) {
-                                        resizeForPreview(input, 720)
-                                    }
-                                    val preview = withContext(Dispatchers.Default) {
-                                        ImageProcessor.process(previewInput, mode, next)
-                                    }
-                                    if (version != previewVersion) return@launch
-                                    result = preview.image
-                                    report = preview.report
-                                    viewMode = ImageViewMode.RESULT
-                                    delay(280)
-                                    val full = withContext(Dispatchers.Default) {
-                                        ImageProcessor.process(input, mode, next)
-                                    }
-                                    if (version == previewVersion) {
-                                        result = full.image
-                                        report = full.report
-                                    }
-                                } catch (_: kotlinx.coroutines.CancellationException) {
-                                    // A newer slider value superseded this preview.
-                                } catch (error: Exception) {
-                                    if (version == previewVersion) message = error.message ?: "实时预览失败。"
-                                } finally {
-                                    if (version == previewVersion) busy = false
+                        val selectedMode = mode
+                        if (input != null) runImageTask { version ->
+                            delay(90)
+                            // Resolve automatic recommendations on the full working image,
+                            // so preview downsampling cannot choose a different noise strategy.
+                            val preview = withContext(Dispatchers.Default) {
+                                val resolved = if (next.auto) ImageProcessor.recommend(input, selectedMode) else next
+                                ImageProcessor.process(resizeForPreview(input, 720), selectedMode, resolved)
+                            }
+                            if (version == previewVersion) {
+                                result = preview.image
+                                // Keep export blocked until the full working image is ready.
+                                delay(180)
+                                val full = withContext(Dispatchers.Default) {
+                                    ImageProcessor.process(input, selectedMode, next)
+                                }
+                                if (version == previewVersion) {
+                                    result = full.image
+                                    report = full.report
                                 }
                             }
                         }
@@ -252,25 +242,30 @@ class MainActivity : ComponentActivity() {
                         val processed = result
                         if (original != null && processed != null && !busy) {
                             busy = true
+                            saving = true
+                            val savedMode = mode.name
+                            val savedParameters = encodeProcessParameters(report?.effectiveParameters ?: params.copy(auto = false))
+                            val originalPath = currentAssetPath
                             scope.launch {
                                 try {
                                     val saved = withContext(Dispatchers.IO) {
                                         HistoryStore.save(
                                             this@MainActivity,
                                             "夜景处理 · " + java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date()),
-                                            mode.name,
+                                            savedMode,
                                             original,
                                             processed,
                                             "本次参数已结构化保存",
-                                            encodeProcessParameters(params),
-                                            currentAssetPath
+                                            savedParameters,
+                                            originalPath
                                         )
                                     }
-                                    history = listOf(saved) + history.filterNot { it.id == saved.id }
+                                    history = withContext(Dispatchers.IO) { HistoryStore.list(this@MainActivity) }
                                     message = "原图、处理结果与本次参数已保存到处理记录。"
                                 } catch (error: Exception) {
                                     message = error.message ?: "保存处理记录失败。"
                                 } finally {
+                                    saving = false
                                     busy = false
                                 }
                             }
@@ -280,10 +275,12 @@ class MainActivity : ComponentActivity() {
                         val image = result
                         if (image != null && !busy) {
                             busy = true
+                            saving = true
+                            val quality = exportQuality
                             scope.launch {
                                 try {
                                     withContext(Dispatchers.IO) {
-                                        saveImageToGallery(image, exportQuality)
+                                        saveImageToGallery(image, quality)
                                         ImageLibraryStore.save(this@MainActivity, "处理结果 · " + java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date()), "处理结果", image)
                                     }
                                     assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
@@ -292,36 +289,28 @@ class MainActivity : ComponentActivity() {
                                 } catch (error: Exception) {
                                     message = error.message ?: "保存失败，请重试。"
                                 } finally {
+                                    saving = false
                                     busy = false
                                 }
                             }
                         }
                     },
                     onOpenAsset = { asset: ImageAsset ->
-                        scope.launch {
-                            busy = true
-                            try {
-                                val image = withContext(Dispatchers.IO) { ImageLibraryStore.load(asset) }
-                                if (image != null) {
-                                    currentAssetPath = asset.imagePath
-                                    source = image
-                                    mode = ProcessingMode.ENHANCE
-                                    params = ProcessParameters()
-                                    val processed = withContext(Dispatchers.Default) {
-                                        ImageProcessor.process(image, mode, ProcessParameters())
-                                    }
-                                    result = processed.image
-                                    report = processed.report
-                                    viewMode = ImageViewMode.RESULT
-                                    screen = AppScreen.EDITOR
-                                    message = "已从图片库打开原图，并自动生成增强预览。"
-                                } else {
-                                    message = "图片文件已不存在或无法读取。"
-                                }
-                            } catch (error: Exception) {
-                                message = error.message ?: "无法打开图片。"
-                            } finally {
-                                busy = false
+                        runImageTask { version ->
+                            val image = withContext(Dispatchers.IO) { ImageLibraryStore.load(asset) }
+                                ?: error("图片文件已不存在或无法读取。")
+                            val processed = withContext(Dispatchers.Default) {
+                                ImageProcessor.process(image, ProcessingMode.ENHANCE, ProcessParameters())
+                            }
+                            if (version == previewVersion) {
+                                currentAssetPath = asset.imagePath
+                                source = image
+                                mode = ProcessingMode.ENHANCE
+                                params = ProcessParameters()
+                                result = processed.image
+                                report = processed.report
+                                viewMode = ImageViewMode.COMPARE
+                                screen = AppScreen.EDITOR
                             }
                         }
                     },
@@ -339,26 +328,24 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onOpenHistory = { item: HistoryItem ->
-                        scope.launch {
-                            busy = true
-                            try {
-                                val pair = withContext(Dispatchers.IO) { HistoryStore.load(item) }
-                                if (pair != null) {
-                                    currentAssetPath = item.originalPath
-                                    source = pair.first
-                                    result = pair.second
-                                    mode = if (item.mode == ProcessingMode.RESTORE.name) ProcessingMode.RESTORE else ProcessingMode.ENHANCE
-                                    report = null
-                                    params = decodeProcessParameters(item.parametersJson) ?: ProcessParameters(auto = false)
-                                    viewMode = ImageViewMode.RESULT
-                                    screen = AppScreen.EDITOR
-                                } else {
-                                    message = "这条记录的图片文件已不存在。"
-                                }
-                            } catch (error: Exception) {
-                                message = error.message ?: "无法打开这条记录。"
-                            } finally {
-                                busy = false
+                        runImageTask { version ->
+                            val pair = withContext(Dispatchers.IO) { HistoryStore.load(item) }
+                                ?: error("这条记录的图片文件已不存在。")
+                            val restoredMode = if (item.mode == ProcessingMode.RESTORE.name) ProcessingMode.RESTORE else ProcessingMode.ENHANCE
+                            val restoredParams = decodeProcessParameters(item.parametersJson) ?: ProcessParameters(auto = false)
+                            val restoredReport = withContext(Dispatchers.Default) {
+                                ImageProcessor.process(pair.first, restoredMode, restoredParams).report.copy(
+                                    processed = ImageProcessor.analyze(pair.second))
+                            }
+                            if (version == previewVersion) {
+                                currentAssetPath = item.originalPath
+                                source = pair.first
+                                result = pair.second
+                                mode = restoredMode
+                                report = restoredReport
+                                params = restoredReport.effectiveParameters
+                                viewMode = ImageViewMode.COMPARE
+                                screen = AppScreen.EDITOR
                             }
                         }
                     },
@@ -438,10 +425,11 @@ class MainActivity : ComponentActivity() {
             ?: error("系统相册不可用，无法创建图片。")
         try {
             val bitmap = Bitmap.createBitmap(image.pixels, image.width, image.height, Bitmap.Config.ARGB_8888)
-            contentResolver.openOutputStream(uri, "w").use { stream ->
-                check(stream != null && bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(85, 100), stream)) { "图片写入失败。" }
-            }
-            bitmap.recycle()
+            try {
+                contentResolver.openOutputStream(uri, "w").use { stream ->
+                    check(stream != null && bitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(85, 100), stream)) { "图片写入失败。" }
+                }
+            } finally { bitmap.recycle() }
             contentResolver.update(
                 uri,
                 ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },

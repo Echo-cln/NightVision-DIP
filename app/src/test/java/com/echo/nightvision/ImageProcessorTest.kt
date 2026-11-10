@@ -93,7 +93,7 @@ class ImageProcessorTest {
     fun automaticParametersLiftAUniformDarkImage() {
         val source = PixelImage(8, 8, IntArray(64) { 0xFF202020.toInt() })
         val result = ImageProcessor.process(source, ProcessingMode.ENHANCE, ProcessParameters())
-        assertTrue(result.report.effectiveParameters.brightness > 0f)
+        assertTrue(result.report.effectiveParameters.gamma < 1f)
         assertTrue(result.report.processed.mean > result.report.original.mean)
     }
 

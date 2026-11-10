@@ -3,6 +3,7 @@ package com.echo.nightvision.ui
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -64,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.LifecycleOwner
 import com.echo.nightvision.data.HistoryItem
 import com.echo.nightvision.data.ImageAsset
+import com.echo.nightvision.processing.EnhancementPolicy
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.ImageStats
 import com.echo.nightvision.processing.PixelImage
@@ -136,6 +138,7 @@ fun NightVisionApp(
         AppThemeChoice.BERRY -> RoseSoft
         AppThemeChoice.AMBER -> AmberSoft
     }
+    BackHandler(enabled = screen != AppScreen.HOME) { onScreen(if (screen == AppScreen.CAMERA) AppScreen.EDITOR else AppScreen.HOME) }
     Scaffold(
         containerColor = Page,
         bottomBar = {
@@ -279,7 +282,6 @@ private fun EditorScreen(
     onSave: () -> Unit,
     onSaveRecord: () -> Unit
 ) {
-    var detailsExpanded by remember { mutableStateOf(false) }
     Column(
         modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp)
@@ -384,11 +386,13 @@ private fun EditorScreen(
                                     color = accent, fontSize = 11.sp
                                 )
                                 Text(
-                                    "曝光 " + String.format(java.util.Locale.getDefault(), "%.2f", effective.exposure) +
+                                    "亮度通道 " + effective.luminanceSpace.label + " · γ " + String.format(java.util.Locale.getDefault(), "%.2f", effective.gamma) + "\n曝光 " + String.format(java.util.Locale.getDefault(), "%.2f", effective.exposure) +
                                         " EV  ·  对比度 " + effective.contrast.toInt() +
                                         "  ·  降噪 " + effective.denoise.toInt() + "%",
                                     color = Ink, fontSize = 11.sp
                                 )
+                                if (mode == ProcessingMode.ENHANCE) Text(
+                                    EnhancementPolicy.explanation(report.original, effective), color = Muted, fontSize = 11.sp)
                             } else {
                                 Button(onClick = onProcess, enabled = !busy,
                                     colors = ButtonDefaults.buttonColors(containerColor = accent)) {
@@ -406,14 +410,8 @@ private fun EditorScreen(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("图像分析与处理详情", color = Ink, fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
-                        Text(if (detailsExpanded) "收起 ˄" else "查看 ˅", color = accent, fontSize = 11.sp)
-                    }
-                }
-                if (detailsExpanded && report != null) {
+                Text("图像分析与处理详情", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                if (report != null) {
                     StatsCard(report, accent)
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White),
                         shape = RoundedCornerShape(17.dp)) {
@@ -471,97 +469,31 @@ private fun ImageComparison(
     val resultBitmap = remember(result) {
         result?.let { Bitmap.createBitmap(it.pixels, it.width, it.height, Bitmap.Config.ARGB_8888).asImageBitmap() }
     }
-    val latestOnSplit = rememberUpdatedState(onSplit)
-    val latestOnViewMode = rememberUpdatedState(onViewMode)
-    Surface(color = Color(0xFF172522), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().height(265.dp)) {
-        Box(Modifier.fillMaxSize()) {
-            when (mode) {
-                ImageViewMode.ORIGINAL -> Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
-                ImageViewMode.RESULT -> if (resultBitmap != null) {
-                    Image(
-                        resultBitmap,
-                        "处理结果",
-                        modifier = Modifier.fillMaxSize().pointerInput(resultBitmap) {
-                            detectTapGestures(
-                                onLongPress = { latestOnViewMode.value(ImageViewMode.ORIGINAL) },
-                                onPress = {
-                                    tryAwaitRelease()
-                                    latestOnViewMode.value(ImageViewMode.RESULT)
-                                }
-                            )
-                        }
-                    )
-                } else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
-                ImageViewMode.COMPARE -> if (resultBitmap != null) {
-                    Canvas(Modifier.fillMaxSize().pointerInput(source.width, source.height) {
-                        detectDragGestures { change, _ ->
-                            change.consume()
-                            val canvasWidth = size.width.toFloat()
-                            val canvasHeight = size.height.toFloat()
-                            if (canvasWidth > 0f && canvasHeight > 0f) {
-                                val imageAspect = source.width.toFloat() / source.height
-                                val canvasAspect = canvasWidth / canvasHeight
-                                val displayedWidth = if (imageAspect > canvasAspect) canvasWidth else canvasHeight * imageAspect
-                                val imageLeft = (canvasWidth - displayedWidth) / 2f
-                                if (displayedWidth > 0f) {
-                                    latestOnSplit.value(
-                                        ((change.position.x - imageLeft) / displayedWidth).coerceIn(0.05f, 0.95f)
-                                    )
-                                }
-                            }
-                        }
-                    }) {
-                        val scale = min(size.width / source.width, size.height / source.height)
-                        val w = (source.width * scale).toInt()
-                        val h = (source.height * scale).toInt()
-                        val left = ((size.width - w) / 2f).toInt()
-                        val top = ((size.height - h) / 2f).toInt()
-                        val dst = IntOffset(left, top)
-                        val dstSize = IntSize(w, h)
-                        drawImage(resultBitmap, dstOffset = dst, dstSize = dstSize)
-                        val divider = left + w * split
-                        clipRect(left.toFloat(), top.toFloat(), divider, (top + h).toFloat()) {
-                            drawImage(originalBitmap, dstOffset = dst, dstSize = dstSize)
-                        }
-                        drawLine(Color.White, Offset(divider, top.toFloat()), Offset(divider, (top + h).toFloat()), 2.dp.toPx())
-                        drawCircle(Color.White, 12.dp.toPx(), Offset(divider, top + h / 2f))
+    // Both complete frames use Fit. No clipping, half-image or moving divider.
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (result != null) Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            ViewChip("完整对比", mode == ImageViewMode.COMPARE) { onViewMode(ImageViewMode.COMPARE) }
+            ViewChip("原图", mode == ImageViewMode.ORIGINAL) { onViewMode(ImageViewMode.ORIGINAL) }
+            ViewChip("处理结果", mode == ImageViewMode.RESULT) { onViewMode(ImageViewMode.RESULT) }
+        }
+        Surface(color = Color(0xFF172522), shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.fillMaxWidth().height(if (mode == ImageViewMode.COMPARE && resultBitmap != null) 300.dp else 230.dp)) {
+            Column(Modifier.fillMaxSize().padding(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (mode != ImageViewMode.RESULT || resultBitmap == null) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        Image(originalBitmap, "完整原图", modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+                        Text("原图", color = Color.White, fontSize = 10.sp, modifier = Modifier.background(Color.Black.copy(alpha = .65f)).padding(5.dp))
                     }
-                } else Image(originalBitmap, "原图", modifier = Modifier.fillMaxSize())
-            }
-            if (resultBitmap != null) {
-                Column(
-                    Modifier.align(Alignment.BottomEnd).padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Surface(
-                        onClick = { onViewMode(if (mode == ImageViewMode.COMPARE) ImageViewMode.RESULT else ImageViewMode.COMPARE) },
-                        color = Color.Black.copy(alpha = 0.62f),
-                        shape = CircleShape,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("⇄", color = Color.White, fontSize = 20.sp)
-                        }
-                    }
-                    Surface(
-                        onClick = { onViewMode(if (mode == ImageViewMode.ORIGINAL) ImageViewMode.RESULT else ImageViewMode.ORIGINAL) },
-                        color = Color.Black.copy(alpha = 0.62f),
-                        shape = CircleShape,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(if (mode == ImageViewMode.ORIGINAL) "效" else "原", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        }
+                }
+                if (mode != ImageViewMode.ORIGINAL && resultBitmap != null) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        Image(resultBitmap, "完整处理结果", modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+                        Text("处理结果", color = Color.White, fontSize = 10.sp, modifier = Modifier.background(Color.Black.copy(alpha = .65f)).padding(5.dp))
                     }
                 }
             }
         }
     }
-    if (mode == ImageViewMode.COMPARE && result != null) Text(
-        "拖动分隔线 · 左侧原图 / 右侧处理结果",
-        color = Muted, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
-    )
 }
 
 @Composable
@@ -593,8 +525,14 @@ private fun StatsCard(report: ProcessingReport, accent: Color) {
                 Stat("高光比例", report.original.highlightPercent.toString() + "%", accent, Modifier.weight(1f))
                 Stat("噪声参考", report.original.residualReference?.let { String.format(java.util.Locale.getDefault(), "%.2f", it) } ?: "不可估计", accent, Modifier.weight(1f))
             }
+            val q = report.original.quality
+            Text("平坦区域噪声 σ参考：" + (q.noiseSigma?.let { String.format(java.util.Locale.getDefault(), "%.2f", it) } ?: "证据不足") +
+                " · 样本 " + q.flatSamples + " · 孤立极值 " + String.format(java.util.Locale.getDefault(), "%.2f%%", q.impulsePercent), color = Muted, fontSize = 10.sp)
             Text("原图亮度分布", color = Muted, fontSize = 10.sp)
             Histogram(report.original, accent)
+            Text("处理后亮度分布", color = Muted, fontSize = 10.sp)
+            Histogram(report.processed, accent)
+            Text("工作图 " + report.processed.width + " × " + report.processed.height + "；大图已采样，导出使用此尺寸，原始文件独立保留。", color = Muted, fontSize = 10.sp)
             Text("噪声参考值为平坦区域残差估计，不等同于噪声真值。", color = Muted, fontSize = 10.sp)
         }
     }

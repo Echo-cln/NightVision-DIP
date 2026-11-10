@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - feat/android-native
+      - feat/adaptive-lowlight
+      - main
   pull_request:
     branches:
       - main
@@ -47,3 +49,11 @@ jobs:
           name: nightvision-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
