@@ -46,7 +46,9 @@ object HistoryStore {
         val folder = File(context.filesDir, "nightvision-history")
         check(folder.exists() || folder.mkdirs()) { "无法创建本地记录目录" }
         val id = UUID.randomUUID().toString()
-        val originalFile = File(folder, id + "-original.jpg")
+        val extension = originalFilePath?.let { File(it).extension.lowercase() }
+            ?.takeIf { it in setOf("jpg", "jpeg", "png", "webp", "heic", "heif") } ?: "jpg"
+        val originalFile = File(folder, id + "-original." + extension)
         val resultFile = File(folder, id + "-result.jpg")
         try {
             if (originalFilePath != null && File(originalFilePath).exists()) {
