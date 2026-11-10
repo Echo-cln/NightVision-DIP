@@ -279,99 +279,180 @@ private fun EditorScreen(
     onSave: () -> Unit,
     onSaveRecord: () -> Unit
 ) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    var detailsExpanded by remember { mutableStateOf(false) }
+    Column(
+        modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { onScreen(AppScreen.HOME) }) { Text("‹ 返回", color = accent) }
-            Spacer(Modifier.weight(1f))
-            Text(if (mode == ProcessingMode.ENHANCE) "低照度增强" else "图像复原", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                TextButton(onClick = onPick) { Text("导入", color = accent, fontSize = 10.sp) }
-                TextButton(onClick = onCamera) { Text("拍摄", color = accent, fontSize = 10.sp) }
-            }
+            TextButton(onClick = { onScreen(AppScreen.HOME) }) { Text("‹ 返回", color = accent, fontSize = 12.sp) }
+            Text(
+                if (mode == ProcessingMode.ENHANCE) "低照度增强" else "图像复原",
+                modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+                color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold
+            )
+            if (source != null) {
+                TextButton(onClick = onPick) { Text("导入", color = accent, fontSize = 11.sp) }
+                TextButton(onClick = onCamera) { Text("拍摄", color = accent, fontSize = 11.sp) }
+            } else Text("本地处理", color = Muted, fontSize = 10.sp)
         }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(if (mode == ProcessingMode.ENHANCE) "让暗部细节显现" else "从一张待校正的图片开始", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
-            Text(if (mode == ProcessingMode.ENHANCE) "分析亮度分布，匹配增强参数。" else "调整亮度与颜色，原图始终保留。", color = Muted, fontSize = 12.sp)
-        }
+
         if (source == null) {
-            Surface(color = Color(0xFFEFF4F1), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().height(220.dp)) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    Text("▧", color = accent, fontSize = 44.sp)
-                    Text("先选择一张图片", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("支持相册导入与系统相机拍摄", color = Muted, fontSize = 11.sp)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onPick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = accent)) { Text("导入照片") }
-                OutlinedButton(onClick = onCamera, modifier = Modifier.weight(1f)) { Text("现场拍照", color = accent) }
-            }
-            if (message != null) Text(message, color = Color(0xFF9A4C4C), fontSize = 11.sp)
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("处理预览", color = Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text(source.width.toString() + " × " + source.height, color = Muted, fontSize = 11.sp)
-            }
-            ImageComparison(source, result, if (result == null) ImageViewMode.ORIGINAL else viewMode, split, onSplit, onViewMode)
-            if (result != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onSaveRecord, enabled = !busy) { Text("保存记录", color = accent, fontSize = 12.sp) }
-                    TextButton(onClick = onSave, enabled = !busy) { Text("导出图片", color = accent, fontSize = 12.sp) }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = params.auto,
-                    onClick = { onParams(ProcessParameters()) },
-                    label = { Text("自动增强", fontSize = 11.sp) }
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    if (mode == ProcessingMode.ENHANCE) "让暗部细节显现" else "从一张待校正的图片开始",
+                    color = Ink, fontSize = 22.sp, fontWeight = FontWeight.SemiBold
                 )
-                FilterChip(
-                    selected = !params.auto,
-                    onClick = { onParams((report?.effectiveParameters ?: params).copy(auto = false)) },
-                    label = { Text("手动精修", fontSize = 11.sp) }
-                )
-                Spacer(Modifier.weight(1f))
-                if (params.auto) TextButton(onClick = onProcess, enabled = !busy) {
-                    Text("重新分析", color = accent, fontSize = 11.sp)
-                }
-            }
-            if (params.auto) {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text("自动增强方案", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text("系统根据平均亮度、暗部比例、亮部占比与噪声参考值匹配处理参数。", color = Muted, fontSize = 11.sp)
-                        if (report != null) {
-                            Text("平均亮度 " + report.original.mean.toInt() + "/255 · 暗部 " + report.original.darkPercent + "% · 高光 " + report.original.highlightPercent + "%", color = accent, fontSize = 11.sp)
-                            Text("噪声参考值 " + (report.original.residualReference?.let { String.format(java.util.Locale.getDefault(), "%.2f", it) } ?: "不可估计") + " · 通道均值 R/G/B " + report.original.channelMeans.joinToString(" / ") { it.toInt().toString() }, color = Muted, fontSize = 10.sp)
-                            Text("本次实际执行 " + report.steps.size + " 个处理步骤 · " + report.elapsedMillis + " ms", color = Muted, fontSize = 10.sp)
-                        }
+                Text("本机处理，原始素材独立保存。支持系统相册与现场拍摄。", color = Muted, fontSize = 12.sp)
+                Surface(
+                    color = Color(0xFFEFF4F1), shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth().height(220.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text("▧", color = accent, fontSize = 42.sp)
+                        Text("选择一张图片", color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("可使用真实夜景或低照度监控截图", color = Muted, fontSize = 11.sp)
                     }
                 }
-            } else {
-                ProfessionalAdjustmentPanel(params, accent, onParams)
+                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Button(
+                        onClick = onPick, modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = accent)
+                    ) { Text("导入照片", fontSize = 12.sp) }
+                    OutlinedButton(onClick = onCamera, modifier = Modifier.weight(1f)) {
+                        Text("现场拍摄", color = accent, fontSize = 12.sp)
+                    }
+                }
+                if (message != null) Text(message, color = Color(0xFF9A4C4C), fontSize = 11.sp)
             }
-            if (message != null) Text(message, color = Muted, fontSize = 11.sp)
-            if (report != null) {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
-                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Text("处理步骤", color = Ink, fontWeight = FontWeight.SemiBold)
-                        report.steps.forEachIndexed { index, step ->
-                            Row(verticalAlignment = Alignment.Top) {
-                                Text((index + 1).toString(), color = accent, fontWeight = FontWeight.Bold, modifier = Modifier.width(22.dp))
-                                Column {
-                                    Text(step.name, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                                    Text(step.detail, color = Muted, fontSize = 10.sp)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("画面预览", color = Ink, fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(
+                    if (busy) "正在更新…" else source.width.toString() + " × " + source.height,
+                    color = if (busy) accent else Muted, fontSize = 10.sp
+                )
+            }
+
+            ImageComparison(
+                source, result, if (result == null) ImageViewMode.ORIGINAL else viewMode,
+                split, onSplit, onViewMode
+            )
+
+            // Photo preview remains visible; only the controls and diagnostics scroll.
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    FilterChip(
+                        selected = params.auto,
+                        onClick = { onParams(ProcessParameters()) },
+                        label = { Text(if (mode == ProcessingMode.ENHANCE) "自动增强" else "自动复原", fontSize = 11.sp) }
+                    )
+                    FilterChip(
+                        selected = !params.auto,
+                        onClick = { onParams((report?.effectiveParameters ?: params).copy(auto = false)) },
+                        label = { Text("手动精修", fontSize = 11.sp) }
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (params.auto) TextButton(onClick = onProcess, enabled = !busy) {
+                        Text("重新分析", color = accent, fontSize = 11.sp)
+                    }
+                }
+
+                if (params.auto) {
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(18.dp)) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Text("系统推荐参数", color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("根据亮度、暗部、高光及平坦区域噪声参考值自动匹配处理策略。",
+                                color = Muted, fontSize = 11.sp)
+                            if (report != null) {
+                                val effective = report.effectiveParameters
+                                Text(
+                                    "平均亮度 " + report.original.mean.toInt() + "/255  ·  暗部 " +
+                                        report.original.darkPercent + "%  ·  高光 " + report.original.highlightPercent + "%",
+                                    color = accent, fontSize = 11.sp
+                                )
+                                Text(
+                                    "曝光 " + String.format(java.util.Locale.getDefault(), "%.2f", effective.exposure) +
+                                        " EV  ·  对比度 " + effective.contrast.toInt() +
+                                        "  ·  降噪 " + effective.denoise.toInt() + "%",
+                                    color = Ink, fontSize = 11.sp
+                                )
+                            } else {
+                                Button(onClick = onProcess, enabled = !busy,
+                                    colors = ButtonDefaults.buttonColors(containerColor = accent)) {
+                                    Text(if (busy) "正在处理…" else "开始自动处理")
                                 }
                             }
                         }
-                        HorizontalDivider(color = Line)
-                        Text("本次计算耗时 " + report.elapsedMillis + " ms", color = Muted, fontSize = 10.sp)
+                    }
+                } else {
+                    ProfessionalAdjustmentPanel(params, accent, onParams)
+                    if (result == null) Button(onClick = onProcess, enabled = !busy,
+                        colors = ButtonDefaults.buttonColors(containerColor = accent),
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text(if (busy) "正在处理…" else "应用当前参数")
                     }
                 }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("图像分析与处理详情", color = Ink, fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
+                        Text(if (detailsExpanded) "收起 ˄" else "查看 ˅", color = accent, fontSize = 11.sp)
+                    }
+                }
+                if (detailsExpanded && report != null) {
+                    StatsCard(report, accent)
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(17.dp)) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Text("实际执行步骤", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            report.steps.forEachIndexed { index, step ->
+                                Row(verticalAlignment = Alignment.Top) {
+                                    Text((index + 1).toString(), color = accent,
+                                        fontWeight = FontWeight.SemiBold, modifier = Modifier.width(22.dp))
+                                    Column {
+                                        Text(step.name, color = Ink, fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium)
+                                        Text(step.detail, color = Muted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                            HorizontalDivider(color = Line)
+                            Text("本次计算耗时 " + report.elapsedMillis + " ms", color = Muted, fontSize = 10.sp)
+                        }
+                    }
+                }
+                if (message != null) Text(message, color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(4.dp))
+            }
+
+            // Export and record actions are fixed at the bottom.
+            if (result != null) Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(onClick = onSaveRecord, enabled = !busy, modifier = Modifier.weight(1f)) {
+                    Text("保存记录", color = accent, fontSize = 12.sp)
+                }
+                Button(
+                    onClick = onSave, enabled = !busy, modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = accent)
+                ) { Text("导出图片", fontSize = 12.sp) }
             }
         }
-        Spacer(Modifier.height(18.dp))
     }
 }
 
