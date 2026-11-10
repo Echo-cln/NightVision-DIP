@@ -86,7 +86,7 @@ fun ProfessionalAdjustmentPanel(
                                 whiteBalance = false, hslAdjustments = List(8) { HslAdjustment() }
                             )
                             AdjustmentGroup.DETAIL -> parameters.copy(
-                                clarity = 0f, texture = 0f, sharpening = 0f, sharpenRadius = 1f, sharpenDetail = 50f, sharpenMasking = 0f, denoise = 0f, denoiseDetail = 50f, colorDenoise = 0f
+                                clarity = 0f, texture = 0f, sharpening = 0f, sharpenRadius = 1f, sharpenDetail = 50f, sharpenMasking = 0f, denoise = 0f, denoiseDetail = 50f, colorDenoise = 0f, bilateralSpatialSigma = 1.2f, bilateralRangeSigma = 25f
                             )
                             AdjustmentGroup.EFFECTS -> parameters.copy(vignette = 0f)
                             AdjustmentGroup.ALGORITHM -> parameters.copy(toneMethod = ToneMethod.GAMMA, claheClipLimit = 2f, claheTiles = 8)
@@ -245,6 +245,21 @@ fun ProfessionalAdjustmentPanel(
                             onClick = { update(parameters.copy(denoiseMethod = DenoiseMethod.MEDIAN)) },
                             label = { Text("中值滤波", fontSize = 10.sp) }
                         )
+                        FilterChip(
+                            selected = parameters.denoiseMethod == DenoiseMethod.BILATERAL,
+                            onClick = { update(parameters.copy(denoiseMethod = DenoiseMethod.BILATERAL)) },
+                            label = { Text("双边滤波", fontSize = 10.sp) }
+                        )
+                    }
+                    if (parameters.denoiseMethod == DenoiseMethod.BILATERAL) {
+                        AdjustmentSlider("空间标准差 σs", parameters.bilateralSpatialSigma, 0.7f..3f, "", accent) {
+                            update(parameters.copy(bilateralSpatialSigma = it))
+                        }
+                        AdjustmentSlider("亮度标准差 σr", parameters.bilateralRangeSigma, 2f..100f, "", accent) {
+                            update(parameters.copy(bilateralRangeSigma = it))
+                        }
+                        Text("双边滤波会根据空间距离与亮度差异加权，优先保留高对比边缘。",
+                             color = Color(0xFF788A83), fontSize = 10.sp)
                     }
                 }
 
@@ -289,11 +304,11 @@ fun ProfessionalAdjustmentPanel(
                     HorizontalDivider(color = Color(0xFFE8EEEA))
                     Text("专业算法实验室", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Text(
-                        "Retinex、同态滤波、双边滤波、非局部均值、Laplacian 锐化和 Wiener 运动模糊复原将作为后续独立算法模块。完成算法实现和验证后才开放参数，避免出现无效控制。",
+                        "Retinex、同态滤波、非局部均值、Laplacian 锐化和 Wiener 运动模糊复原将作为后续独立算法模块。完成算法实现和验证后才开放参数，避免出现无效控制。",
                         color = Color(0xFF788A83), fontSize = 10.sp, lineHeight = 16.sp
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("双边滤波 · 待接入") })
+                        FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("非局部均值 · 待接入") })
                         FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("Retinex · 待接入") })
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
