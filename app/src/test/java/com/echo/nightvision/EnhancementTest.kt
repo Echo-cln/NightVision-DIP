@@ -113,4 +113,11 @@ class EnhancementTest {
         assertTrue((out.image.pixels[2] and 255) <= 8)
     }
 
+    @Test fun severelyUnderexposedMixedSceneAvoidsAggressiveLocalEqualization() {
+        val input = PixelImage(32,32,IntArray(1024) { gray(if (it < 920) 5 else 120) })
+        val out = run(input)
+        assertEquals(ToneMethod.GAMMA,out.report.effectiveParameters.toneMethod)
+        assertTrue(out.report.effectiveParameters.gamma >= .6f)
+    }
+
 }

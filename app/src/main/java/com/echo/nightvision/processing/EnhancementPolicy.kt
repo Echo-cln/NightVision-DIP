@@ -53,12 +53,13 @@ object EnhancementPolicy {
         val q = stats.quality
         val noise = q.noiseSigma ?: 0.0
         val dark = stats.mean < 105
-        val localContrast = dark && stats.deviation > 2 && stats.deviation < 45 && q.illuminationSpread > 8
+        val severelyDark = stats.mean < 35 && stats.darkPercent > 75 && stats.deviation > 10
+        val localContrast = dark && !severelyDark && stats.deviation > 2 && stats.deviation < 45 && q.illuminationSpread > 8
         val impulse = q.impulsePercent >= .3
         val method = if (impulse) DenoiseMethod.MEDIAN else DenoiseMethod.BILATERAL
         val gamma = if (stats.mean in 1.0..104.0) {
             // One tone lift rather than stacked brightness, exposure and Gamma.
-            (ln(105.0 / 255) / ln(stats.mean / 255)).coerceIn(.48, 1.0).toFloat()
+            (ln(105.0 / 255) / ln(stats.mean / 255)).coerceIn(if (severelyDark) .6 else .48, 1.0).toFloat()
         } else 1f
         // Gamma can magnify weak input noise. Use its local derivative at the
         // scene mean as a conservative reference, rather than always blurring.
@@ -82,7 +83,7 @@ object EnhancementPolicy {
 
     fun explanation(stats: ImageStats, p: ProcessParameters): String {
         val tone = if (p.toneMethod == ToneMethod.CLAHE) "明暗不均且对比度偏低，温和局部均衡后提亮" else
-            if (p.gamma < 1f) "整体偏暗，使用 Gamma 提亮并保留黑场" else "亮度已足够，保持原有影调"
+            if (p.gamma < 1f) if (stats.mean < 35 && stats.darkPercent > 75 && stats.deviation > 10) "严重欠曝，采用保守 Gamma，限制暗部噪声与量化条带放大" else "整体偏暗，使用 Gamma 提亮并保留黑场" else "亮度已足够，保持原有影调"
         val noise = if (p.denoise == 0f) "噪声证据不足，不额外平滑" else
             if (p.denoiseMethod == DenoiseMethod.MEDIAN) "孤立极值较多，采用中值降噪" else "平坦区域存在波动，采用保边双边降噪"
         return "$tone；$noise。"
