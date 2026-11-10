@@ -252,6 +252,11 @@ fun ProfessionalAdjustmentPanel(
                             label = { Text("双边滤波", fontSize = 10.sp) }
                         )
                     }
+                    FilterChip(
+                        selected = parameters.denoiseMethod == DenoiseMethod.MEAN,
+                        onClick = { update(parameters.copy(denoiseMethod = DenoiseMethod.MEAN)) },
+                        label = { Text("3×3 均值") }
+                    )
                     if (parameters.denoiseMethod == DenoiseMethod.BILATERAL) {
                         AdjustmentSlider("空间标准差 σs", parameters.bilateralSpatialSigma, 0.7f..3f, "", accent) {
                             update(parameters.copy(bilateralSpatialSigma = it))

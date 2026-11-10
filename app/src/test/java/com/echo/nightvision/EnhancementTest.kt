@@ -44,6 +44,8 @@ class EnhancementTest {
         assertEquals(DenoiseMethod.BILATERAL, out.report.effectiveParameters.denoiseMethod)
         assertTrue(out.report.effectiveParameters.denoise > 0f)
         assertTrue(out.report.processed.quality.noiseSigma!! < out.report.original.quality.noiseSigma!!)
+        fun error(pixels: IntArray) = pixels.sumOf { val d = (it and 255) - 150; d * d }
+        assertTrue(error(out.image.pixels) < error(input.pixels))
     }
     @Test fun isolatedExtremesSelectMedianRatherThanBlurEveryEdge() {
         val pixels = IntArray(32 * 32) { gray(110) }
