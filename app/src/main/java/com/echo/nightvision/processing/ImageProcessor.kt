@@ -464,60 +464,52 @@ object ImageProcessor {
         return output
     }
 
+    /**
+     * Luma-only 3x3 Gaussian/median denoising. Adjusting luminance, rather than
+     * smoothing RGB channels independently, preserves hue/chroma in flat regions.
+     * Color noise is handled separately by the YCbCr chroma filter.
+     */
     private fun denoise(source: PixelImage, out: IntArray, amount: Double, method: DenoiseMethod) {
         val width = source.width
         val height = source.height
-        val src = source.pixels
-        val weights = arrayOf(intArrayOf(1, 2, 1), intArrayOf(2, 4, 2), intArrayOf(1, 2, 1))
-        val red = IntArray(9)
-        val green = IntArray(9)
-        val blue = IntArray(9)
+        val pixels = source.pixels
+        val luminance = FloatArray(pixels.size) { index ->
+            val pixel = pixels[index]
+            luma(
+                ((pixel ushr 16) and 255).toDouble(),
+                ((pixel ushr 8) and 255).toDouble(),
+                (pixel and 255).toDouble()
+            ).toFloat()
+        }
+        val gaussianWeights = arrayOf(intArrayOf(1, 2, 1), intArrayOf(2, 4, 2), intArrayOf(1, 2, 1))
+        val neighborhood = FloatArray(9)
+        val mix = amount.coerceIn(0.0, 1.0)
         for (y in 0 until height) for (x in 0 until width) {
             val index = y * width + x
-            val center = src[index]
+            val center = pixels[index]
             var cursor = 0
             for (dy in -1..1) for (dx in -1..1) {
                 val xx = (x + dx).coerceIn(0, width - 1)
                 val yy = (y + dy).coerceIn(0, height - 1)
-                val value = src[yy * width + xx]
-                red[cursor] = (value ushr 16) and 255
-                green[cursor] = (value ushr 8) and 255
-                blue[cursor] = value and 255
-                cursor++
+                neighborhood[cursor++] = luminance[yy * width + xx]
             }
-            val filteredRed: Double
-            val filteredGreen: Double
-            val filteredBlue: Double
-            if (method == DenoiseMethod.MEDIAN) {
-                red.sort()
-                green.sort()
-                blue.sort()
-                filteredRed = red[4].toDouble()
-                filteredGreen = green[4].toDouble()
-                filteredBlue = blue[4].toDouble()
+            val filtered = if (method == DenoiseMethod.MEDIAN) {
+                neighborhood.sort()
+                neighborhood[4].toDouble()
             } else {
-                var r = 0.0
-                var g = 0.0
-                var b = 0.0
+                var weighted = 0.0
                 cursor = 0
                 for (dy in -1..1) for (dx in -1..1) {
-                    val weight = weights[dy + 1][dx + 1]
-                    r += red[cursor] * weight
-                    g += green[cursor] * weight
-                    b += blue[cursor] * weight
-                    cursor++
+                    weighted += neighborhood[cursor++] * gaussianWeights[dy + 1][dx + 1]
                 }
-                filteredRed = r / 16.0
-                filteredGreen = g / 16.0
-                filteredBlue = b / 16.0
+                weighted / 16.0
             }
-            val originalRed = ((center ushr 16) and 255).toDouble()
-            val originalGreen = ((center ushr 8) and 255).toDouble()
-            val originalBlue = (center and 255).toDouble()
-            val outRed = (originalRed * (1.0 - amount) + filteredRed * amount).toInt().coerceIn(0, 255)
-            val outGreen = (originalGreen * (1.0 - amount) + filteredGreen * amount).toInt().coerceIn(0, 255)
-            val outBlue = (originalBlue * (1.0 - amount) + filteredBlue * amount).toInt().coerceIn(0, 255)
-            out[index] = (center and -0x1000000) or (outRed shl 16) or (outGreen shl 8) or outBlue
+            val delta = (filtered - luminance[index]) * mix
+            val red = (((center ushr 16) and 255) + delta).roundToInt().coerceIn(0, 255)
+            val green = (((center ushr 8) and 255) + delta).roundToInt().coerceIn(0, 255)
+            val blue = ((center and 255) + delta).roundToInt().coerceIn(0, 255)
+            out[index] = (center and -0x1000000) or
+                (red shl 16) or (green shl 8) or blue
         }
     }
 
