@@ -210,7 +210,7 @@ object ImageProcessor {
             g += tonalDelta
             b += tonalDelta
 
-            if (p.whiteBalance || mode == ProcessingMode.RESTORE) {
+            if (p.whiteBalance) {
                 r *= 1.0 + (wb[0] - 1.0) * 0.7
                 g *= 1.0 + (wb[1] - 1.0) * 0.7
                 b *= 1.0 + (wb[2] - 1.0) * 0.7
@@ -305,7 +305,7 @@ object ImageProcessor {
             if (p.clarity != 0f || p.texture != 0f || p.sharpening != 0f) {
                 add(ProcessingStep("局部细节增强", "清晰度/纹理分尺度增强；锐化半径 " + sharpenRadius + "，细节 " + p.sharpenDetail.toInt() + "%，蒙版 " + p.sharpenMasking.toInt() + "%"))
             }
-            if (p.whiteBalance || mode == ProcessingMode.RESTORE) {
+            if (p.whiteBalance) {
                 add(ProcessingStep("灰度世界白平衡", "RGB 增益 " + wb.joinToString(" / ") { String.format("%.2f", it) }))
             }
             if (p.vibrance != 0f || p.saturation != 100f || p.temperature != 0f || p.tint != 0f) {
