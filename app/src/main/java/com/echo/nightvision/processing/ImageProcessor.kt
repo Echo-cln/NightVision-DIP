@@ -364,6 +364,13 @@ object ImageProcessor {
                 val area = (x1 - x0) * (y1 - y0)
                 val histogram = IntArray(256)
                 for (y in y0 until y1) for (x in x0 until x1) histogram[bins[y * width + x]]++
+                if (histogram.count { it > 0 } <= 1) {
+                    // Constant tiles contain no usable local contrast to enhance.
+                    // Keep an identity mapping instead of fabricating bright edges.
+                    val identity = maps[ty * cols + tx]
+                    for (bin in 0..255) identity[bin] = bin.toFloat()
+                    continue
+                }
 
                 val cap = max(1, (clipLimit.coerceIn(0.5f, 8f) * area / 256f).roundToInt())
                 var excess = 0
