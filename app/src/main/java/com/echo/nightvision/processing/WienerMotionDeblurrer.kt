@@ -103,12 +103,14 @@ object WienerMotionDeblurrer {
             for (x in 0 until fftWidth) {
                 val projection = frequencyX[x].toDouble() + fy
                 val argument = PI * length * projection
-                val transfer = if (kotlin.math.abs(argument) < 1e-7) {
+                val gain = if (kotlin.math.abs(argument) < 1e-7) {
+                    // Motion PSFs do not attenuate frequencies perpendicular to
+                    // the motion direction. Preserve those components and DC.
                     1.0
                 } else {
-                    sin(argument) / argument
+                    val transfer = sin(argument) / argument
+                    transfer / (transfer * transfer + k)
                 }
-                val gain = transfer / (transfer * transfer + k)
                 val index = rowOffset + x
                 real[index] = (real[index] * gain).toFloat()
                 imaginary[index] = (imaginary[index] * gain).toFloat()
