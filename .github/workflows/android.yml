@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - main
-      - feat/android-native
-      - feat/android-mean-denoise
+      - 'feat/**'
   pull_request:
     branches:
       - main
