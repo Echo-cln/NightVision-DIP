@@ -158,4 +158,61 @@ class ImageProcessorTest {
         assertTrue(channel >= 185)
     }
 
+    @Test
+    fun clahePreservesDimensionsAlphaAndDoesNotMutateSource() {
+        val pixels = IntArray(15 * 11) { index ->
+            val x = index % 15
+            val y = index / 15
+            val gray = (20 + x * 7 + y * 2).coerceIn(0, 255)
+            0x7F000000 or (gray shl 16) or (gray shl 8) or gray
+        }
+        val before = pixels.copyOf()
+        val image = PixelImage(15, 11, pixels)
+        val result = ImageProcessor.process(
+            image, ProcessingMode.ENHANCE,
+            ProcessParameters(denoise = 0f, auto = false, toneMethod = ToneMethod.CLAHE,
+                claheClipLimit = 2f, claheTiles = 4)
+        )
+        assertEquals(15, result.image.width)
+        assertEquals(11, result.image.height)
+        assertEquals(before.toList(), pixels.toList())
+        assertTrue(result.image.pixels.all { it ushr 24 == 0x7F })
+        assertTrue(result.report.steps.any { it.name.contains("CLAHE") })
+        assertTrue(result.image.pixels.any { resultPixel -> resultPixel !in before })
+    }
+
+    @Test
+    fun claheHandlesSinglePixelAndExtremeTileSettings() {
+        val source = PixelImage(1, 1, intArrayOf(0xFF404040.toInt()))
+        val result = ImageProcessor.process(
+            source, ProcessingMode.ENHANCE,
+            ProcessParameters(denoise = 0f, auto = false, toneMethod = ToneMethod.CLAHE,
+                claheClipLimit = 8f, claheTiles = 16)
+        )
+        assertEquals(1, result.image.pixels.size)
+        assertEquals(0xFF, result.image.pixels[0] ushr 24)
+    }
+
+    @Test
+    fun claheParametersAffectLocalToneMapping() {
+        val pixels = IntArray(32 * 32) { i ->
+            val x = i % 32
+            val y = i / 32
+            val gray = (20 + (x / 4) * 6 + (y / 4) * 3).coerceIn(0, 255)
+            0xFF000000.toInt() or (gray shl 16) or (gray shl 8) or gray
+        }
+        val input = PixelImage(32, 32, pixels)
+        val a = ImageProcessor.process(
+            input, ProcessingMode.ENHANCE,
+            ProcessParameters(denoise = 0f, auto = false, toneMethod = ToneMethod.CLAHE,
+                claheClipLimit = 0.5f, claheTiles = 2)
+        )
+        val b = ImageProcessor.process(
+            input, ProcessingMode.ENHANCE,
+            ProcessParameters(denoise = 0f, auto = false, toneMethod = ToneMethod.CLAHE,
+                claheClipLimit = 6f, claheTiles = 8)
+        )
+        assertTrue(a.image.pixels.toList() != b.image.pixels.toList())
+    }
+
 }
