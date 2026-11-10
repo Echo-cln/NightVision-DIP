@@ -60,6 +60,11 @@ data class ProcessParameters(
     val denoiseDetail: Float = 50f,
     val bilateralSpatialSigma: Float = 1.2f,
     val bilateralRangeSigma: Float = 25f,
+    val motionDeblurEnabled: Boolean = false,
+    val motionLengthPx: Float = 12f,
+    val motionAngleDegrees: Float = 0f,
+    val wienerRegularization: Float = 0.01f,
+    val motionStrength: Float = 85f,
     val colorDenoise: Float = 0f,
     val vignette: Float = 0f,
     val curveShadows: Float = 0f,
@@ -147,14 +152,27 @@ object ImageProcessor {
         val p = if (requested.auto && mode == ProcessingMode.ENHANCE) EnhancementPolicy.parameters(before)
             else if (requested.auto) autoParameters(before, mode) else requested
         val output = source.pixels.copyOf()
+        var processingSource = source
+        val motionResult = if (mode == ProcessingMode.RESTORE && p.motionDeblurEnabled) {
+            WienerMotionDeblurrer.restore(
+                source,
+                p.motionLengthPx,
+                p.motionAngleDegrees,
+                p.wienerRegularization,
+                p.motionStrength
+            ).also { restored ->
+                processingSource = restored.image
+                System.arraycopy(restored.image.pixels, 0, output, 0, output.size)
+            }
+        } else null
 
         if (p.denoise > 0f) {
             val denoiseAmount = (p.denoise.coerceIn(0f, 100f) / 100.0) * (1.0 - p.denoiseDetail.coerceIn(0f, 100f) / 100.0 * 0.45)
-            denoise(source, output, denoiseAmount, p.denoiseMethod,
+            denoise(processingSource, output, denoiseAmount, p.denoiseMethod,
                 p.bilateralSpatialSigma, p.bilateralRangeSigma)
         }
         if (p.colorDenoise > 0f) {
-            denoiseChroma(source, output, p.colorDenoise.coerceIn(0f, 100f) / 100.0)
+            denoiseChroma(processingSource, output, p.colorDenoise.coerceIn(0f, 100f) / 100.0)
         }
 
         val filtered = PixelImage(source.width, source.height, output)
@@ -298,6 +316,26 @@ object ImageProcessor {
         val steps = buildList {
             add(ProcessingStep("图像亮度分析", "平均亮度 " + before.mean.toInt() + "/255，暗部 " + before.darkPercent + "%"))
             if (requested.auto && mode == ProcessingMode.ENHANCE) add(ProcessingStep("自适应策略", EnhancementPolicy.explanation(before, p)))
+            if (motionResult?.applied == true) {
+                add(ProcessingStep(
+                    "Wiener 频域运动模糊复原",
+                    "线性运动 PSF：长度 " + String.format("%.1f", p.motionLengthPx) +
+                        " px，方向 " + String.format("%.1f", p.motionAngleDegrees) +
+                        "°，工作 PSF " + String.format("%.2f", motionResult.effectiveMotionLength) +
+                        " px，K=" + String.format("%.3f", p.wienerRegularization) +
+                        "，强度 " + p.motionStrength.toInt() + "%；工作分辨率 " +
+                        motionResult.workingWidth + "×" + motionResult.workingHeight +
+                        "，FFT " + motionResult.fftWidth + "×" + motionResult.fftHeight
+                ))
+            } else if (mode == ProcessingMode.RESTORE && p.motionDeblurEnabled) {
+                add(ProcessingStep(
+                    "Wiener 复原未执行",
+                    if (p.motionStrength <= 0f) "复原强度为 0%，未修改图像"
+                    else "当前工作分辨率下的运动长度不足 1 px；请增大原图模糊长度或使用更高分辨率输入"
+                ))
+            } else if (mode == ProcessingMode.RESTORE) {
+                add(ProcessingStep("Wiener 运动模糊复原未启用", "请切换手动精修并启用 Wiener，指定运动长度与方向"))
+            }
             if (p.denoise > 0f) add(ProcessingStep(
                 when (p.denoiseMethod) {
                     DenoiseMethod.MEAN -> "3×3 明度均值滤波"

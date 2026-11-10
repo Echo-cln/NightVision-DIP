@@ -224,7 +224,11 @@ class MainActivity : ComponentActivity() {
                             // so preview downsampling cannot choose a different noise strategy.
                             val preview = withContext(Dispatchers.Default) {
                                 val resolved = if (next.auto) ImageProcessor.recommend(input, selectedMode) else next
-                                ImageProcessor.process(resizeForPreview(input, 720), selectedMode, resolved)
+                                val previewInput = resizeForPreview(input, 720)
+                                val previewParameters = if (selectedMode == ProcessingMode.RESTORE && resolved.motionDeblurEnabled) {
+                                    resolved.copy(motionLengthPx = resolved.motionLengthPx * previewInput.width / input.width.toFloat())
+                                } else resolved
+                                ImageProcessor.process(previewInput, selectedMode, previewParameters)
                             }
                             if (version == previewVersion) {
                                 result = preview.image

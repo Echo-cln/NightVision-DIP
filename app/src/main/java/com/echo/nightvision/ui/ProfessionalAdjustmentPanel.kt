@@ -33,6 +33,7 @@ import com.echo.nightvision.processing.LuminanceSpace
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.HslAdjustment
 import com.echo.nightvision.processing.ProcessParameters
+import com.echo.nightvision.processing.ProcessingMode
 import com.echo.nightvision.processing.ToneMethod
 import com.echo.nightvision.processing.ToneCurve
 import java.util.Locale
@@ -50,6 +51,7 @@ private val hslNames = listOf("红", "橙", "黄", "绿", "青", "蓝", "紫", "
 @Composable
 fun ProfessionalAdjustmentPanel(
     parameters: ProcessParameters,
+    mode: ProcessingMode,
     accent: Color,
     onParameters: (ProcessParameters) -> Unit
 ) {
@@ -90,7 +92,7 @@ fun ProfessionalAdjustmentPanel(
                                 clarity = 0f, texture = 0f, sharpening = 0f, sharpenRadius = 1f, sharpenDetail = 50f, sharpenMasking = 0f, denoise = 0f, denoiseDetail = 50f, colorDenoise = 0f, bilateralSpatialSigma = 1.2f, bilateralRangeSigma = 25f
                             )
                             AdjustmentGroup.EFFECTS -> parameters.copy(vignette = 0f)
-                            AdjustmentGroup.ALGORITHM -> parameters.copy(toneMethod = ToneMethod.GAMMA, claheClipLimit = 2f, claheTiles = 8, claheStrength = 100f, luminanceSpace = LuminanceSpace.YCBCR)
+                            AdjustmentGroup.ALGORITHM -> parameters.copy(toneMethod = ToneMethod.GAMMA, claheClipLimit = 2f, claheTiles = 8, claheStrength = 100f, luminanceSpace = LuminanceSpace.YCBCR, motionDeblurEnabled = false, motionLengthPx = 12f, motionAngleDegrees = 0f, wienerRegularization = 0.01f, motionStrength = 85f)
                         }
                     )
                 }) {
@@ -317,7 +319,41 @@ fun ProfessionalAdjustmentPanel(
                         Text("先裁剪各局部灰度直方图，再双线性插值合成连续映射。数值越大，局部对比越强，也可能放大噪声。",
                              color = Color(0xFF788A83), fontSize = 10.sp)
                     }
-
+                    if (mode == ProcessingMode.RESTORE) {
+                        HorizontalDivider(color = Color(0xFFE8EEEA))
+                        Text("运动模糊复原 · Wiener", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        FilterChip(
+                            selected = parameters.motionDeblurEnabled,
+                            onClick = { update(parameters.copy(motionDeblurEnabled = !parameters.motionDeblurEnabled)) },
+                            label = { Text(if (parameters.motionDeblurEnabled) "Wiener 已启用" else "启用 Wiener 运动复原") }
+                        )
+                        if (parameters.motionDeblurEnabled) {
+                            AdjustmentSlider("模糊长度（原图）", parameters.motionLengthPx, 2f..64f, " px", accent) {
+                                update(parameters.copy(motionLengthPx = it))
+                            }
+                            AdjustmentSlider("运动方向", parameters.motionAngleDegrees, -90f..90f, "°", accent) {
+                                update(parameters.copy(motionAngleDegrees = it))
+                            }
+                            AdjustmentSlider(
+                                "Wiener 正则化 K", parameters.wienerRegularization, 0.001f..0.1f, "", accent,
+                                valueLabel = { String.format(Locale.US, "%.3f", it) }
+                            ) {
+                                update(parameters.copy(wienerRegularization = it))
+                            }
+                            AdjustmentSlider("复原强度", parameters.motionStrength, 0f..100f, "%", accent) {
+                                update(parameters.copy(motionStrength = it))
+                            }
+                            Text(
+                                "模型假设曝光期间发生匀速直线运动。0° 为水平方向，90° 为垂直方向。K 越大，噪声抑制越强，但去模糊也会更保守。长度以原图像素计；预览会按原图分辨率同步缩放 PSF。为控制内存，频域反卷积在受限工作分辨率上计算，再回写亮度校正量；极细小拖影的恢复能力有限。请依据拖影方向估计 PSF。",
+                                color = Color(0xFF788A83), fontSize = 10.sp, lineHeight = 16.sp
+                            )
+                        } else {
+                            Text(
+                                "适用于近似线性、匀速运动造成的拖影。启用后指定模糊长度与方向，再点击“应用当前参数”。",
+                                color = Color(0xFF788A83), fontSize = 10.sp, lineHeight = 16.sp
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -331,13 +367,14 @@ private fun AdjustmentSlider(
     range: ClosedFloatingPointRange<Float>,
     suffix: String,
     accent: Color,
+    valueLabel: ((Float) -> String)? = null,
     onValueChange: (Float) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = Color(0xFF263B35), fontSize = 12.sp, modifier = Modifier.weight(1f))
             Text(
-                String.format(Locale.getDefault(), "%.1f", value) + suffix,
+                (valueLabel?.invoke(value) ?: String.format(Locale.getDefault(), "%.1f", value)) + suffix,
                 color = accent,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold
