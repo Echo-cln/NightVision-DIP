@@ -66,6 +66,8 @@ import com.echo.nightvision.data.HistoryItem
 import com.echo.nightvision.data.ImageAsset
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.ImageStats
+import com.echo.nightvision.processing.ImageQualityMetrics
+import com.echo.nightvision.processing.QualityComparison
 import com.echo.nightvision.processing.PixelImage
 import com.echo.nightvision.processing.ProcessParameters
 import com.echo.nightvision.processing.ProcessingMode
@@ -105,6 +107,12 @@ fun NightVisionApp(
     viewMode: ImageViewMode,
     split: Float,
     message: String?,
+    qualityReferenceName: String?,
+    qualityComparison: QualityComparison?,
+    qualityError: String?,
+    qualityBusy: Boolean,
+    onPickReference: () -> Unit,
+    onClearReference: () -> Unit,
     onTheme: (AppThemeChoice) -> Unit,
     onAutoProcessOnImportChange: (Boolean) -> Unit,
     onExportQualityChange: (Int) -> Unit,
@@ -152,8 +160,9 @@ fun NightVisionApp(
             AppScreen.CAMERA -> CameraScreen(lifecycleOwner, { onScreen(AppScreen.EDITOR) }, onCameraPhoto)
             AppScreen.EDITOR -> EditorScreen(
                 Modifier.padding(padding), mode, source, result, report, parameters, busy,
-                accent, viewMode, split, message, onScreen, onPick, onCamera, onProcess,
-                onParameters, onViewMode, onSplit, onSave, onSaveRecord
+                accent, viewMode, split, message, qualityReferenceName, qualityComparison,
+                qualityError, qualityBusy, onPickReference, onClearReference,
+                onScreen, onPick, onCamera, onProcess, onParameters, onViewMode, onSplit, onSave, onSaveRecord
             )
             AppScreen.LIBRARY -> LibraryScreen(Modifier.padding(padding), assets, accent, onOpenAsset, onDeleteAsset, onToggleFavorite)
             AppScreen.HISTORY -> HistoryScreen(Modifier.padding(padding), history, accent, onOpenHistory, onDeleteHistory, onClearHistory)
@@ -269,6 +278,12 @@ private fun EditorScreen(
     viewMode: ImageViewMode,
     split: Float,
     message: String?,
+    qualityReferenceName: String?,
+    qualityComparison: QualityComparison?,
+    qualityError: String?,
+    qualityBusy: Boolean,
+    onPickReference: () -> Unit,
+    onClearReference: () -> Unit,
     onScreen: (AppScreen) -> Unit,
     onPick: () -> Unit,
     onCamera: () -> Unit,
@@ -413,25 +428,36 @@ private fun EditorScreen(
                         Text(if (detailsExpanded) "收起 ˄" else "查看 ˅", color = accent, fontSize = 11.sp)
                     }
                 }
-                if (detailsExpanded && report != null) {
-                    StatsCard(report, accent)
-                    Card(colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(17.dp)) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Text("实际执行步骤", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            report.steps.forEachIndexed { index, step ->
-                                Row(verticalAlignment = Alignment.Top) {
-                                    Text((index + 1).toString(), color = accent,
-                                        fontWeight = FontWeight.SemiBold, modifier = Modifier.width(22.dp))
-                                    Column {
-                                        Text(step.name, color = Ink, fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium)
-                                        Text(step.detail, color = Muted, fontSize = 10.sp)
+                if (detailsExpanded) {
+                    if (report != null) StatsCard(report, accent)
+                    QualityEvaluationCard(
+                        referenceName = qualityReferenceName,
+                        comparison = qualityComparison,
+                        error = qualityError,
+                        busy = qualityBusy,
+                        accent = accent,
+                        onPickReference = onPickReference,
+                        onClearReference = onClearReference
+                    )
+                    if (report != null) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color.White),
+                            shape = RoundedCornerShape(17.dp)) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                Text("实际执行步骤", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                report.steps.forEachIndexed { index, step ->
+                                    Row(verticalAlignment = Alignment.Top) {
+                                        Text((index + 1).toString(), color = accent,
+                                            fontWeight = FontWeight.SemiBold, modifier = Modifier.width(22.dp))
+                                        Column {
+                                            Text(step.name, color = Ink, fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium)
+                                            Text(step.detail, color = Muted, fontSize = 10.sp)
+                                        }
                                     }
                                 }
+                                HorizontalDivider(color = Line)
+                                Text("本次计算耗时 " + report.elapsedMillis + " ms", color = Muted, fontSize = 10.sp)
                             }
-                            HorizontalDivider(color = Line)
-                            Text("本次计算耗时 " + report.elapsedMillis + " ms", color = Muted, fontSize = 10.sp)
                         }
                     }
                 }
@@ -452,6 +478,94 @@ private fun EditorScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = accent)
                 ) { Text("导出图片", fontSize = 12.sp) }
             }
+        }
+    }
+}
+
+@Composable
+private fun QualityEvaluationCard(
+    referenceName: String?,
+    comparison: QualityComparison?,
+    error: String?,
+    busy: Boolean,
+    accent: Color,
+    onPickReference: () -> Unit,
+    onClearReference: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(17.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("参考图质量评价", color = Ink, fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                if (busy) Text("计算中…", color = accent, fontSize = 10.sp)
+            }
+            Text(
+                "选择同一场景、同尺寸且像素对齐的清晰参考图。系统将比较原图与处理结果相对参考图的 PSNR 和 SSIM。",
+                color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+            )
+            if (referenceName != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("参考图：$referenceName", color = Ink, fontSize = 10.sp,
+                        modifier = Modifier.weight(1f), maxLines = 1)
+                    TextButton(onClick = onClearReference) {
+                        Text("移除", color = Color(0xFF9A4C4C), fontSize = 10.sp)
+                    }
+                }
+            }
+            if (comparison != null) {
+                QualityMetricRow(
+                    "PSNR · RGB",
+                    formatPsnr(comparison.before.psnrDb),
+                    comparison.after?.let { formatPsnr(it.psnrDb) } ?: "尚无处理结果"
+                )
+                QualityMetricRow(
+                    "SSIM · Y 8×8",
+                    String.format(java.util.Locale.getDefault(), "%.4f", comparison.before.ssim8x8),
+                    comparison.after?.let {
+                        String.format(java.util.Locale.getDefault(), "%.4f", it.ssim8x8)
+                    } ?: "尚无处理结果"
+                )
+                QualityMetricRow(
+                    "MSE · RGB",
+                    String.format(java.util.Locale.getDefault(), "%.2f", comparison.before.mseRgb),
+                    comparison.after?.let {
+                        String.format(java.util.Locale.getDefault(), "%.2f", it.mseRgb)
+                    } ?: "尚无处理结果"
+                )
+                Text("PSNR 越高越好；SSIM 越接近 1 越好；MSE 越低越好。", color = Muted, fontSize = 10.sp)
+            }
+            if (error != null) {
+                Text(error, color = Color(0xFF9A4C4C), fontSize = 10.sp, lineHeight = 15.sp)
+            }
+            OutlinedButton(onClick = onPickReference, modifier = Modifier.fillMaxWidth()) {
+                Text(if (referenceName == null) "选择清晰参考图" else "更换参考图", color = accent, fontSize = 11.sp)
+            }
+            Text(
+                "SSIM 使用 8×8 非重叠亮度窗口；尺寸不一致或未配准的图片不会自动缩放计算。无干净真值时，不应将原图与增强图之间的 PSNR/SSIM 当作画质提升证据。",
+                color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+private fun formatPsnr(value: Double): String =
+    if (value.isInfinite()) "∞ dB"
+    else String.format(java.util.Locale.getDefault(), "%.2f dB", value)
+
+@Composable
+private fun QualityMetricRow(label: String, before: String, after: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+        Column(horizontalAlignment = Alignment.End) {
+            Text("原图  $before", color = Muted, fontSize = 10.sp)
+            Text("处理后  $after", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
