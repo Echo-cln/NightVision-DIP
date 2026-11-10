@@ -328,7 +328,7 @@ fun ProfessionalAdjustmentPanel(
                                 update(parameters.copy(motionStrength = it))
                             }
                             Text(
-                                "模型假设曝光期间发生匀速直线运动。0° 为水平方向，90° 为垂直方向。K 越大，噪声抑制越强，但去模糊也会更保守。长度以原图像素计；预览会按原图分辨率同步缩放 PSF。请尽量依据拖影方向估计 PSF。",
+                                "模型假设曝光期间发生匀速直线运动。0° 为水平方向，90° 为垂直方向。K 越大，噪声抑制越强，但去模糊也会更保守。长度以原图像素计；预览会按原图分辨率同步缩放 PSF。为控制内存，频域反卷积在受限工作分辨率上计算，再回写亮度校正量；极细小拖影的恢复能力有限。请依据拖影方向估计 PSF。",
                                 color = Color(0xFF788A83), fontSize = 10.sp, lineHeight = 16.sp
                             )
                         } else {
