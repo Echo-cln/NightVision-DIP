@@ -66,7 +66,6 @@ import com.echo.nightvision.data.HistoryItem
 import com.echo.nightvision.data.ImageAsset
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.ImageStats
-import com.echo.nightvision.processing.ImageQualityMetrics
 import com.echo.nightvision.processing.QualityComparison
 import com.echo.nightvision.processing.PixelImage
 import com.echo.nightvision.processing.ProcessParameters
