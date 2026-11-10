@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +42,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -94,6 +98,7 @@ fun NightVisionApp(
     busy: Boolean,
     history: List<HistoryItem>,
     assets: List<ImageAsset>,
+    libraryStorageBytes: Long,
     autoProcessOnImport: Boolean,
     exportQuality: Int,
     theme: AppThemeChoice,
@@ -152,7 +157,7 @@ fun NightVisionApp(
             )
             AppScreen.LIBRARY -> LibraryScreen(Modifier.padding(padding), assets, accent, onOpenAsset, onDeleteAsset, onToggleFavorite)
             AppScreen.HISTORY -> HistoryScreen(Modifier.padding(padding), history, accent, onOpenHistory, onDeleteHistory, onClearHistory)
-            AppScreen.PROFILE -> ProfileScreen(Modifier.padding(padding), theme, onTheme, accent, history.size, assets.size, autoProcessOnImport, exportQuality, onAutoProcessOnImportChange, onExportQualityChange)
+            AppScreen.PROFILE -> ProfileScreen(Modifier.padding(padding), theme, onTheme, accent, history.size, assets.size, libraryStorageBytes, autoProcessOnImport, exportQuality, onAutoProcessOnImportChange, onExportQualityChange)
         }
     }
 }
@@ -653,6 +658,7 @@ private fun ProfileScreen(
     accent: Color,
     recordCount: Int,
     assetCount: Int,
+    libraryStorageBytes: Long,
     autoProcessOnImport: Boolean,
     exportQuality: Int,
     onAutoProcessOnImportChange: (Boolean) -> Unit,
@@ -711,6 +717,7 @@ private fun ProfileScreen(
                 Text("工作空间", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text("已保存处理记录： " + recordCount, color = Muted, fontSize = 11.sp)
                 Text("图片库资产： " + assetCount, color = Muted, fontSize = 11.sp)
+                Text("图片库空间： " + String.format(java.util.Locale.getDefault(), "%.1f MB", libraryStorageBytes / 1048576.0), color = Muted, fontSize = 11.sp)
                 Text("默认处理：自动增强，可在编辑器中切换手动精修。", color = Muted, fontSize = 11.sp)
                 Text("原始图片不会被处理结果覆盖。", color = Muted, fontSize = 11.sp)
             }
