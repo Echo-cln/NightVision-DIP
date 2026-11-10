@@ -50,6 +50,8 @@ fun encodeProcessParameters(parameters: ProcessParameters): String {
         .put("sharpenDetail", parameters.sharpenDetail)
         .put("sharpenMasking", parameters.sharpenMasking)
         .put("denoiseDetail", parameters.denoiseDetail)
+        .put("bilateralSpatialSigma", parameters.bilateralSpatialSigma)
+        .put("bilateralRangeSigma", parameters.bilateralRangeSigma)
         .put("colorDenoise", parameters.colorDenoise)
         .put("vignette", parameters.vignette)
         .put("curveShadows", parameters.curveShadows)
@@ -124,6 +126,8 @@ fun decodeProcessParameters(raw: String?): ProcessParameters? {
             sharpenDetail = json.optDouble("sharpenDetail", 50.0).toFloat(),
             sharpenMasking = json.optDouble("sharpenMasking", 0.0).toFloat(),
             denoiseDetail = json.optDouble("denoiseDetail", 50.0).toFloat(),
+            bilateralSpatialSigma = json.optDouble("bilateralSpatialSigma", 1.2).toFloat().coerceIn(0.7f, 3f),
+            bilateralRangeSigma = json.optDouble("bilateralRangeSigma", 25.0).toFloat().coerceIn(2f, 100f),
             colorDenoise = json.optDouble("colorDenoise", 0.0).toFloat(),
             vignette = json.optDouble("vignette", 0.0).toFloat(),
             curveShadows = json.optDouble("curveShadows", 0.0).toFloat(),
