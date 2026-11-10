@@ -215,4 +215,27 @@ class ImageProcessorTest {
         assertTrue(a.image.pixels.toList() != b.image.pixels.toList())
     }
 
+    @Test
+    fun luminanceDenoisingPreservesPixelColorDifferences() {
+        val source = IntArray(25) { 0xFF464646.toInt() }
+        val centerIndex = 2 * 5 + 2
+        source[centerIndex] = 0xFF785028.toInt()
+        val output = ImageProcessor.process(
+            PixelImage(5, 5, source),
+            ProcessingMode.ENHANCE,
+            ProcessParameters(
+                brightness = 0f, contrast = 0f, denoise = 100f, denoiseDetail = 0f,
+                colorDenoise = 0f, saturation = 100f, auto = false,
+                denoiseMethod = DenoiseMethod.GAUSSIAN
+            )
+        )
+        val actual = output.image.pixels[centerIndex]
+        val r = (actual ushr 16) and 255
+        val g = (actual ushr 8) and 255
+        val b = actual and 255
+        assertTrue(kotlin.math.abs((r - g) - 40) <= 2)
+        assertTrue(kotlin.math.abs((g - b) - 40) <= 2)
+        assertTrue(source[centerIndex] != actual)
+    }
+
 }
