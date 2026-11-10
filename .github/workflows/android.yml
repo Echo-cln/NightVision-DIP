@@ -13,6 +13,12 @@ on:
 permissions:
   contents: read
 
+# Only test the newest commit on this development branch.
+# Avoid redundant full Android SDK/Gradle builds on rapid UI iterations.
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
