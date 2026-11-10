@@ -1,6 +1,7 @@
 package com.echo.nightvision.processing
 
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -8,7 +9,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 enum class ProcessingMode { ENHANCE, RESTORE }
-enum class DenoiseMethod { GAUSSIAN, MEDIAN }
+enum class DenoiseMethod { GAUSSIAN, MEDIAN, BILATERAL }
 enum class ToneMethod { GAMMA, HISTOGRAM_EQUALIZATION, CLAHE }
 
 data class HslAdjustment(
@@ -57,6 +58,8 @@ data class ProcessParameters(
     val sharpenDetail: Float = 50f,
     val sharpenMasking: Float = 0f,
     val denoiseDetail: Float = 50f,
+    val bilateralSpatialSigma: Float = 1.2f,
+    val bilateralRangeSigma: Float = 25f,
     val colorDenoise: Float = 0f,
     val vignette: Float = 0f,
     val curveShadows: Float = 0f,
@@ -137,7 +140,8 @@ object ImageProcessor {
 
         if (p.denoise > 0f) {
             val denoiseAmount = (p.denoise.coerceIn(0f, 100f) / 100.0) * (1.0 - p.denoiseDetail.coerceIn(0f, 100f) / 100.0 * 0.45)
-            denoise(source, output, denoiseAmount, p.denoiseMethod)
+            denoise(source, output, denoiseAmount, p.denoiseMethod,
+                p.bilateralSpatialSigma, p.bilateralRangeSigma)
         }
         if (p.colorDenoise > 0f) {
             denoiseChroma(source, output, p.colorDenoise.coerceIn(0f, 100f) / 100.0)
@@ -285,8 +289,14 @@ object ImageProcessor {
                 add(ProcessingStep("Gamma 与曝光校正", "曝光 " + String.format("%.2f", p.exposure) + " EV，Gamma γ = " + String.format("%.2f", gamma)))
             }
             if (p.denoise > 0f) add(ProcessingStep(
-                if (p.denoiseMethod == DenoiseMethod.MEDIAN) "3×3 中值滤波" else "3×3 高斯滤波",
-                "基础降噪强度 " + p.denoise.toInt() + "%"
+                when (p.denoiseMethod) {
+                    DenoiseMethod.MEDIAN -> "3×3 明度中值滤波"
+                    DenoiseMethod.BILATERAL -> "明度双边滤波"
+                    DenoiseMethod.GAUSSIAN -> "3×3 明度高斯滤波"
+                },
+                "降噪 " + p.denoise.toInt() + "%" +
+                    if (p.denoiseMethod == DenoiseMethod.BILATERAL)
+                        "，σs=" + p.bilateralSpatialSigma + "，σr=" + p.bilateralRangeSigma else ""
             ))
             if (p.colorDenoise > 0f) add(ProcessingStep("色度降噪", "YCbCr 色度平滑强度 " + p.colorDenoise.toInt() + "%"))
             if (p.shadows != 0f || p.highlights != 0f || p.whites != 0f || p.blacks != 0f) {
@@ -476,7 +486,14 @@ object ImageProcessor {
      * smoothing RGB channels independently, preserves hue/chroma in flat regions.
      * Color noise is handled separately by the YCbCr chroma filter.
      */
-    private fun denoise(source: PixelImage, out: IntArray, amount: Double, method: DenoiseMethod) {
+    private fun denoise(
+        source: PixelImage,
+        out: IntArray,
+        amount: Double,
+        method: DenoiseMethod,
+        bilateralSpatialSigma: Float,
+        bilateralRangeSigma: Float
+    ) {
         val width = source.width
         val height = source.height
         val pixels = source.pixels
@@ -494,22 +511,42 @@ object ImageProcessor {
         for (y in 0 until height) for (x in 0 until width) {
             val index = y * width + x
             val center = pixels[index]
-            var cursor = 0
-            for (dy in -1..1) for (dx in -1..1) {
-                val xx = (x + dx).coerceIn(0, width - 1)
-                val yy = (y + dy).coerceIn(0, height - 1)
-                neighborhood[cursor++] = luminance[yy * width + xx]
-            }
-            val filtered = if (method == DenoiseMethod.MEDIAN) {
-                neighborhood.sort()
-                neighborhood[4].toDouble()
-            } else {
+            val filtered = if (method == DenoiseMethod.BILATERAL) {
+                val spatial = bilateralSpatialSigma.coerceIn(0.7f, 3f).toDouble()
+                val range = bilateralRangeSigma.coerceIn(2f, 100f).toDouble()
+                val radius = if (spatial < 1.2) 1 else 2
+                val centerY = luminance[index].toDouble()
                 var weighted = 0.0
-                cursor = 0
-                for (dy in -1..1) for (dx in -1..1) {
-                    weighted += neighborhood[cursor++] * gaussianWeights[dy + 1][dx + 1]
+                var weightSum = 0.0
+                for (dy in -radius..radius) for (dx in -radius..radius) {
+                    val xx = (x + dx).coerceIn(0, width - 1)
+                    val yy = (y + dy).coerceIn(0, height - 1)
+                    val neighborY = luminance[yy * width + xx].toDouble()
+                    val diff = neighborY - centerY
+                    val weight = exp(-(dx * dx + dy * dy) / (2.0 * spatial * spatial) -
+                        diff * diff / (2.0 * range * range))
+                    weighted += weight * neighborY
+                    weightSum += weight
                 }
-                weighted / 16.0
+                if (weightSum > 0.0) weighted / weightSum else centerY
+            } else {
+                var cursor = 0
+                for (dy in -1..1) for (dx in -1..1) {
+                    val xx = (x + dx).coerceIn(0, width - 1)
+                    val yy = (y + dy).coerceIn(0, height - 1)
+                    neighborhood[cursor++] = luminance[yy * width + xx]
+                }
+                if (method == DenoiseMethod.MEDIAN) {
+                    neighborhood.sort()
+                    neighborhood[4].toDouble()
+                } else {
+                    var weighted = 0.0
+                    cursor = 0
+                    for (dy in -1..1) for (dx in -1..1) {
+                        weighted += neighborhood[cursor++] * gaussianWeights[dy + 1][dx + 1]
+                    }
+                    weighted / 16.0
+                }
             }
             val delta = (filtered - luminance[index]) * mix
             val red = (((center ushr 16) and 255) + delta).roundToInt().coerceIn(0, 255)
