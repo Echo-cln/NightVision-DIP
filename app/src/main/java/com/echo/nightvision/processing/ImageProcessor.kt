@@ -297,7 +297,7 @@ object ImageProcessor {
         val after = analyze(image)
         val steps = buildList {
             add(ProcessingStep("图像亮度分析", "平均亮度 " + before.mean.toInt() + "/255，暗部 " + before.darkPercent + "%"))
-            if (motionResult != null) {
+            if (motionResult?.applied == true) {
                 add(ProcessingStep(
                     "Wiener 频域运动模糊复原",
                     "线性运动 PSF：长度 " + String.format("%.1f", p.motionLengthPx) +
@@ -307,6 +307,12 @@ object ImageProcessor {
                         "，强度 " + p.motionStrength.toInt() + "%；工作分辨率 " +
                         motionResult.workingWidth + "×" + motionResult.workingHeight +
                         "，FFT " + motionResult.fftWidth + "×" + motionResult.fftHeight
+                ))
+            } else if (mode == ProcessingMode.RESTORE && p.motionDeblurEnabled) {
+                add(ProcessingStep(
+                    "Wiener 复原未执行",
+                    if (p.motionStrength <= 0f) "复原强度为 0%，未修改图像"
+                    else "当前工作分辨率下的运动长度不足 1 px；请增大原图模糊长度或使用更高分辨率输入"
                 ))
             } else if (mode == ProcessingMode.RESTORE) {
                 add(ProcessingStep("Wiener 运动模糊复原未启用", "请切换手动精修并启用 Wiener，指定运动长度与方向"))
