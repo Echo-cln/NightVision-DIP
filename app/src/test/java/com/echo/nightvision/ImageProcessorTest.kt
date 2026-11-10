@@ -276,4 +276,18 @@ class ImageProcessorTest {
         assertTrue(kotlin.math.abs(bilateralY - 40) <= 2)
     }
 
+    @Test
+    fun manualRestoreCanDisableWhiteBalance() {
+        val pixels = IntArray(16) { 0xFF784020.toInt() }
+        val input = PixelImage(4, 4, pixels)
+        val base = ProcessParameters(
+            brightness = 0f, contrast = 0f, denoise = 0f, saturation = 100f,
+            whiteBalance = false, auto = false
+        )
+        val without = ImageProcessor.process(input, ProcessingMode.RESTORE, base)
+        val with = ImageProcessor.process(input, ProcessingMode.RESTORE, base.copy(whiteBalance = true))
+        assertEquals(pixels.toList(), without.image.pixels.toList())
+        assertTrue(with.image.pixels.toList() != pixels.toList())
+    }
+
 }
