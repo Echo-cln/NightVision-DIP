@@ -22,6 +22,7 @@ class WienerMotionDeblurrerTest {
         )
         assertEquals(before.toList(), restored.image.pixels.toList())
         assertEquals(before.toList(), pixels.toList())
+        assertTrue(!restored.applied)
     }
 
     @Test
@@ -168,6 +169,20 @@ class WienerMotionDeblurrerTest {
         assertTrue(result.fftWidth <= 1024)
         assertTrue(result.fftHeight <= 512)
         assertTrue(kotlin.math.abs(result.effectiveMotionLength - 20f * 896f / width) < 0.01f)
+    }
+
+    @Test
+    fun subPixelWorkingPsfIsReportedAsSkippedInsteadOfPretendingToRestore() {
+        val width = 1800
+        val height = 900
+        val source = PixelImage(width, height, IntArray(width * height) { 0xFF606060.toInt() })
+        val result = WienerMotionDeblurrer.restore(
+            source, motionLengthPx = 2f, angleDegrees = 0f,
+            regularization = 0.01f, strength = 100f
+        )
+        assertTrue(!result.applied)
+        assertEquals(source.pixels.toList(), result.image.pixels.toList())
+        assertTrue(result.effectiveMotionLength < 1f)
     }
 
 }
