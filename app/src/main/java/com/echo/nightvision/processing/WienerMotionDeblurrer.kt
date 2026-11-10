@@ -281,9 +281,9 @@ object WienerMotionDeblurrer {
     }
 
     private fun pixelLuma(pixel: Int): Double = luma(
-        ((pixel ushr 16) and 255).toDouble(),
-        ((pixel ushr 8) and 255).toDouble(),
-        (pixel and 255).toDouble()
+        (pixel ushr 16) and 255,
+        (pixel ushr 8) and 255,
+        pixel and 255
     )
 
     private fun luma(red: Int, green: Int, blue: Int): Double =
