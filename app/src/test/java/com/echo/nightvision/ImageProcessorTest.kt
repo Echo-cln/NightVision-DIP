@@ -290,4 +290,40 @@ class ImageProcessorTest {
         assertTrue(with.image.pixels.toList() != pixels.toList())
     }
 
+    @Test
+    fun restoreModeRunsWienerWhenExplicitlyEnabled() {
+        val pixels = IntArray(64) { index ->
+            val x = index % 8
+            val value = if (x in 3..4) 210 else 35
+            0xFF000000.toInt() or (value shl 16) or (value shl 8) or value
+        }
+        val parameters = ProcessParameters(
+            auto = false,
+            denoise = 0f,
+            colorDenoise = 0f,
+            motionDeblurEnabled = true,
+            motionLengthPx = 8f,
+            motionAngleDegrees = 0f,
+            wienerRegularization = 0.01f,
+            motionStrength = 80f
+        )
+        val result = ImageProcessor.process(
+            PixelImage(8, 8, pixels), ProcessingMode.RESTORE, parameters
+        )
+        assertTrue(result.report.steps.any { it.name.contains("Wiener") })
+        assertTrue(result.report.effectiveParameters.motionDeblurEnabled)
+        assertEquals(8, result.image.width)
+        assertEquals(8, result.image.height)
+    }
+
+    @Test
+    fun enhancementModeDoesNotAccidentallyRunMotionRestoration() {
+        val image = PixelImage(8, 8, IntArray(64) { 0xFF404040.toInt() })
+        val result = ImageProcessor.process(
+            image, ProcessingMode.ENHANCE,
+            ProcessParameters(auto = false, denoise = 0f, motionDeblurEnabled = true)
+        )
+        assertTrue(result.report.steps.none { it.name.contains("Wiener") })
+    }
+
 }
