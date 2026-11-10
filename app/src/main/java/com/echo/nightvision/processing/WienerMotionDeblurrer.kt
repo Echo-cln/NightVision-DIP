@@ -15,7 +15,8 @@ data class WienerRestoreResult(
     val workingHeight: Int,
     val fftWidth: Int,
     val fftHeight: Int,
-    val effectiveMotionLength: Float
+    val effectiveMotionLength: Float,
+    val applied: Boolean
 )
 
 /**
@@ -49,7 +50,7 @@ object WienerMotionDeblurrer {
 
         if (blend <= 0f || effectiveLength < 1f) {
             return WienerRestoreResult(
-                source, workWidth, workHeight, workWidth, workHeight, effectiveLength
+                source, workWidth, workHeight, workWidth, workHeight, effectiveLength, false
             )
         }
 
@@ -156,7 +157,7 @@ object WienerMotionDeblurrer {
 
         return WienerRestoreResult(
             PixelImage(source.width, source.height, output),
-            workWidth, workHeight, fftWidth, fftHeight, effectiveLength
+            workWidth, workHeight, fftWidth, fftHeight, effectiveLength, true
         )
     }
 
