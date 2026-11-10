@@ -250,4 +250,30 @@ class ImageProcessorTest {
         assertTrue(output.image.pixels.all { it == pixel })
     }
 
+    @Test
+    fun bilateralDenoisingPreservesHighContrastEdgesBetterThanGaussian() {
+        val pixels = IntArray(7 * 5) { i ->
+            val gray = if (i % 7 <= 3) 40 else 190
+            0xFF000000.toInt() or (gray shl 16) or (gray shl 8) or gray
+        }
+        val source = PixelImage(7, 5, pixels)
+        val base = ProcessParameters(
+            brightness = 0f, contrast = 0f, denoise = 100f, denoiseDetail = 0f,
+            saturation = 100f, auto = false
+        )
+        val gaussian = ImageProcessor.process(
+            source, ProcessingMode.ENHANCE, base.copy(denoiseMethod = DenoiseMethod.GAUSSIAN)
+        )
+        val bilateral = ImageProcessor.process(
+            source, ProcessingMode.ENHANCE,
+            base.copy(denoiseMethod = DenoiseMethod.BILATERAL,
+                bilateralSpatialSigma = 1.5f, bilateralRangeSigma = 10f)
+        )
+        val index = 2 * 7 + 3
+        val gaussianY = gaussian.image.pixels[index] and 255
+        val bilateralY = bilateral.image.pixels[index] and 255
+        assertTrue(gaussianY > bilateralY)
+        assertTrue(kotlin.math.abs(bilateralY - 40) <= 2)
+    }
+
 }
