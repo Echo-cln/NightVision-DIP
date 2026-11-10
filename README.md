@@ -236,3 +236,6 @@ GitHub Actions 在 `feat/android-native` 分支推送时执行单元测试和 De
 
 <div align="center"><sub>NightVision-DIP · Build it. Measure it. Understand it.</sub></div>
 
+
+### Android 明度均值滤波
+新增 3×3 明度均值滤波，复制边界，保留 alpha；沿用降噪强度和细节参数，方法名 MEAN 随参数 JSON 保存并回填。真机需验证：选择均值后强度 0/50/100 的差异、保存记录重启回填、边缘软化及彩色高光裁剪。均值会模糊边缘，不属于运动模糊复原。
