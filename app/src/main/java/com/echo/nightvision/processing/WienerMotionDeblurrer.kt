@@ -244,12 +244,14 @@ object WienerMotionDeblurrer {
     }
 
     private fun sampleSourceLuma(source: PixelImage, x: Double, y: Double): Float {
-        val x0 = floor(x).toInt().coerceIn(0, source.width - 1)
-        val y0 = floor(y).toInt().coerceIn(0, source.height - 1)
+        val clampedX = x.coerceIn(0.0, (source.width - 1).toDouble())
+        val clampedY = y.coerceIn(0.0, (source.height - 1).toDouble())
+        val x0 = floor(clampedX).toInt()
+        val y0 = floor(clampedY).toInt()
         val x1 = min(source.width - 1, x0 + 1)
         val y1 = min(source.height - 1, y0 + 1)
-        val wx = (x - floor(x)).coerceIn(0.0, 1.0)
-        val wy = (y - floor(y)).coerceIn(0.0, 1.0)
+        val wx = clampedX - x0
+        val wy = clampedY - y0
         val a = pixelLuma(source.pixels[y0 * source.width + x0])
         val b = pixelLuma(source.pixels[y0 * source.width + x1])
         val c = pixelLuma(source.pixels[y1 * source.width + x0])
@@ -259,12 +261,14 @@ object WienerMotionDeblurrer {
     }
 
     private fun sampleField(values: FloatArray, width: Int, height: Int, x: Double, y: Double): Double {
-        val x0 = floor(x).toInt().coerceIn(0, width - 1)
-        val y0 = floor(y).toInt().coerceIn(0, height - 1)
+        val clampedX = x.coerceIn(0.0, (width - 1).toDouble())
+        val clampedY = y.coerceIn(0.0, (height - 1).toDouble())
+        val x0 = floor(clampedX).toInt()
+        val y0 = floor(clampedY).toInt()
         val x1 = min(width - 1, x0 + 1)
         val y1 = min(height - 1, y0 + 1)
-        val wx = (x - floor(x)).coerceIn(0.0, 1.0)
-        val wy = (y - floor(y)).coerceIn(0.0, 1.0)
+        val wx = clampedX - x0
+        val wy = clampedY - y0
         val a = values[y0 * width + x0]
         val b = values[y0 * width + x1]
         val c = values[y1 * width + x0]
