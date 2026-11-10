@@ -66,6 +66,7 @@ class WienerMotionDeblurrerTest {
 
         val blurredError = meanSquaredError(sharp, blurred)
         val restoredError = meanSquaredError(sharp, restored.image.pixels)
+        assertTrue(restored.applied)
         assertTrue(
             "Expected Wiener restoration to reduce MSE ($blurredError -> $restoredError)",
             restoredError < blurredError * 0.7
@@ -88,6 +89,7 @@ class WienerMotionDeblurrerTest {
             PixelImage(width, height, blurred), motionLengthPx = 7f,
             angleDegrees = 90f, regularization = 0.003f, strength = 100f
         )
+        assertTrue(restored.applied)
         assertTrue(
             meanSquaredError(sharp, restored.image.pixels) <
                 meanSquaredError(sharp, blurred) * 0.75
@@ -162,6 +164,7 @@ class WienerMotionDeblurrerTest {
             source, motionLengthPx = 20f, angleDegrees = 0f,
             regularization = 0.02f, strength = 60f
         )
+        assertTrue(result.applied)
         assertEquals(896, result.workingWidth)
         assertEquals(448, result.workingHeight)
         assertEquals(width, result.image.width)
