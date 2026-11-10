@@ -312,7 +312,7 @@ fun ProfessionalAdjustmentPanel(
                             label = { Text(if (parameters.motionDeblurEnabled) "Wiener 已启用" else "启用 Wiener 运动复原") }
                         )
                         if (parameters.motionDeblurEnabled) {
-                            AdjustmentSlider("运动长度", parameters.motionLengthPx, 2f..64f, " px", accent) {
+                            AdjustmentSlider("模糊长度（原图）", parameters.motionLengthPx, 2f..64f, " px", accent) {
                                 update(parameters.copy(motionLengthPx = it))
                             }
                             AdjustmentSlider("运动方向", parameters.motionAngleDegrees, -90f..90f, "°", accent) {
@@ -328,7 +328,7 @@ fun ProfessionalAdjustmentPanel(
                                 update(parameters.copy(motionStrength = it))
                             }
                             Text(
-                                "模型假设曝光期间发生匀速直线运动。0° 为水平方向，90° 为垂直方向。K 越大，噪声抑制越强，但去模糊也会更保守。请尽量依据拖影方向估计 PSF。",
+                                "模型假设曝光期间发生匀速直线运动。0° 为水平方向，90° 为垂直方向。K 越大，噪声抑制越强，但去模糊也会更保守。长度以原图像素计；预览会按原图分辨率同步缩放 PSF。请尽量依据拖影方向估计 PSF。",
                                 color = Color(0xFF788A83), fontSize = 10.sp, lineHeight = 16.sp
                             )
                         } else {
