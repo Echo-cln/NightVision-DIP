@@ -6,6 +6,7 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -84,7 +85,7 @@ class MainActivity : ComponentActivity() {
                             previewVersion += 1
                             val image = withContext(Dispatchers.IO) { decodeImage(uri) }
                             val asset = withContext(Dispatchers.IO) {
-                                ImageLibraryStore.save(this@MainActivity, "夜景照片", sourceType, image, uri)
+                                ImageLibraryStore.save(this@MainActivity, importedImageName(uri), sourceType, image, uri)
                             }
                             assets = listOf(asset) + assets.filterNot { it.id == asset.id }
                             libraryStorageBytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
@@ -256,7 +257,7 @@ class MainActivity : ComponentActivity() {
                                     val saved = withContext(Dispatchers.IO) {
                                         HistoryStore.save(
                                             this@MainActivity,
-                                            "夜景照片",
+                                            "夜景处理 · " + java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date()),
                                             mode.name,
                                             original,
                                             processed,
@@ -283,7 +284,7 @@ class MainActivity : ComponentActivity() {
                                 try {
                                     withContext(Dispatchers.IO) {
                                         saveImageToGallery(image, exportQuality)
-                                        ImageLibraryStore.save(this@MainActivity, "夜景处理结果", "处理结果", image)
+                                        ImageLibraryStore.save(this@MainActivity, "处理结果 · " + java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date()), "处理结果", image)
                                     }
                                     assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
                                     libraryStorageBytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
@@ -376,6 +377,20 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun importedImageName(uri: Uri): String {
+        val name = runCatching {
+            contentResolver.query(
+                uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull()
+        return name?.substringBeforeLast('.')?.trim()?.take(70)
+            ?.takeIf { it.isNotBlank() }
+            ?: "夜景_" + java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+                .format(java.util.Date())
     }
 
     private fun resizeForPreview(source: PixelImage, maxDimension: Int): PixelImage {
