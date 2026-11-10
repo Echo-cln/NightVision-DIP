@@ -1,3 +1,20 @@
+## 客户端入口与当前开发状态
+
+**Android 原生端（`app/`）是当前重构主线**：Jetpack Compose + CameraX + Kotlin 图像处理 + SQLite 本地图像库。Android 与 Web 为两个独立客户端，不是 WebView 套壳。运行效果和最新变更以 `feat/android-native` 分支及 Android CI 为准。
+
+`web/` 是另一套可运行的 HTML/CSS/JavaScript 浏览器端，保留已确认的视觉基础、自动处理、基础实时调节、右下角对比工具与本地记录。**本次新增的 Android CLAHE、双边滤波、专业曲线及图片库，尚未同步到 Web 图像算法内核**，两端功能暂不完全一致。
+
+```bash
+cd web
+npm run dev
+```
+
+无需安装 npm 依赖。测试、构建、实际算法范围和真机验收说明见 [`web/README.md`](web/README.md)。本次未发布在线托管；CLAHE、同态和运动模糊反卷积仍未接入该 Web 前端。
+
+以下保留仓库原有 Android 工程说明，它与 `web/` 分别运行。
+
+---
+
 <div align="center">
 
 # 🌙 NightVision-DIP · 夜视大师
@@ -11,7 +28,7 @@
 ![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)
 ![Language](https://img.shields.io/badge/Language-Kotlin-7F52FF?logo=kotlin&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4)
-![Stage](https://img.shields.io/badge/Stage-S0%20%7C%20Development-orange)
+![Stage](https://img.shields.io/badge/Stage-S1%20%7C%20Native%20MVP-blue)
 ![License](https://img.shields.io/badge/License-TBD-lightgrey)
 
 [项目简介](#-项目简介) · [功能规划](#-功能规划) · [技术架构](#-技术架构) · [快速开始](#-快速开始) · [算法与实验](#-算法与实验) · [团队协作](#-团队协作)
@@ -33,11 +50,11 @@
 
 ## 📖 项目简介
 
-**NightVision-DIP（夜视大师）** 是《数字图像处理》课程设计项目，聚焦手机夜间拍照中常见的**亮度不足、噪声、运动模糊和色彩失真**问题。计划使用 **Kotlin + Jetpack Compose + CameraX + OpenCV Android** 实现端侧单张照片拍摄、传统算法增强与复原、处理过程可视化和客观评价。
+**NightVision-DIP（夜视大师）** 是《数字图像处理》课程设计项目，聚焦手机夜间拍照中常见的**亮度不足、噪声、运动模糊和色彩失真**问题。Android 原生端采用 **Kotlin + Jetpack Compose**。当前使用系统照片选择器和应用内 CameraX 拍摄，图像在设备本地由 Kotlin 像素处理核心计算；不通过 WebView 加载手机网页，也不上传照片。
 
 项目重点不是一个简单的「提亮滤镜」，而是理解、实现并实验验证**空间域增强、频率域处理、退化建模、图像复原和彩色图像处理**等方法。
 
-> **真实开发状态（S0）：** Android 基础工程已创建，开发者已在本地成功执行 Debug 构建；**CameraX、OpenCV、图像增强、去噪、去模糊和质量评价等功能尚未实现**。下表中的功能均按实际进度标记。
+> **原生端当前状态（专业编辑器阶段）：** 已接入 Compose 页面、相册与 CameraX 拍摄、自动增强、专业影调及 HSL、RGB 曲线、直方图均衡化、CLAHE、明度高斯/中值/双边滤波、色度降噪、原图对比、SQLite 图片库、处理记录与导出。**同态滤波、Retinex、运动模糊 PSF、维纳反卷积和严格 PSNR/SSIM 实验尚未接入。** CI 构建不代表真机交互或图像质量实测通过。
 
 ### 设计原则
 
@@ -52,17 +69,17 @@
 | 模块 | 具体内容 | 状态 |
 |---|---|---|
 | Android 基础工程 | Kotlin、Jetpack Compose、Gradle | ✅ 已创建并通过本地 Debug 构建 |
-| 摄像头与相册 | CameraX 拍照、相册图片导入 | ⏳ 待实现 |
-| 自动退化分析 | 亮度分布、对比度、噪声估计、模糊程度 | ⏳ 待实现 |
-| 空间域增强 | Gamma、直方图均衡化、CLAHE | ⏳ 待实现 |
-| 彩色空间增强 | HSV / YCbCr 亮度分量处理 | ⏳ 待实现 |
-| 噪声建模与去噪 | 高斯 / 椒盐噪声、均值 / 高斯 / 中值滤波 | ⏳ 待实现 |
+| 摄像头与相册 | CameraX 应用内拍摄、系统照片选择器 | ✅ 已接入，待真机验收 |
+| 自动退化分析 | 平均亮度、暗部比例、通道均值、平坦区域残差参考 | ✅ 基础分析已实现 |
+| 空间域增强 | 曝光、亮度、对比度、分区高光/阴影、Gamma、全局直方图均衡、CLAHE、曲线 | ✅ 已接入算法与界面 |
+| 彩色空间增强 | HSL 色相通道调整、YCbCr 色度降噪、灰度世界白平衡 | ✅ 基础路径已实现；完整颜色空间实验待扩充 |
+| 噪声建模与去噪 | 明度 3×3 高斯/中值、明度双边滤波、YCbCr 色度平滑 | ✅ 已实现；可复现噪声合成实验待接入 |
 | 频率域增强 | FFT、低通 / 高通、同态滤波 | ⏳ 待实现 |
-| 图像复原 | 运动模糊 PSF 建模、维纳滤波 | ⏳ 待实现 |
-| 彩色恢复 | 白平衡、色偏校正 | ⏳ 待实现 |
-| 一键夜景模式 | 基于分析结果选择增强策略 | ⏳ 待实现 |
-| 可视化与质量评价 | 处理步骤、前后对比、定量分析 | ⏳ 待实现 |
-| 结果导出 | 将增强照片保存到本地 | ⏳ 待实现 |
+| 图像复原 | 当前为亮度与颜色校正；运动模糊 PSF、维纳滤波 | 部分实现；维纳复原待实现 |
+| 彩色恢复 | 灰度世界白平衡、饱和度、色温 | ✅ 基础处理已实现 |
+| 自动处理 | 根据亮度统计匹配亮度、对比度和降噪参数 | ✅ 已实现 |
+| 可视化与质量评价 | 固定原图预览、长按原图、分屏对比、亮度直方图、处理步骤及耗时 | ✅ 已实现基础展示；量化实验评价待接入 |
+| 结果导出 | JPEG 导出、SQLite 图片库、收藏/筛选、处理记录和完整参数回填 | ✅ 已实现，待真机验证 |
 
 ### 课程设计要求映射
 
@@ -79,10 +96,10 @@
 | 层次 | 技术 / 规划 |
 |---|---|
 | Android 应用 | Kotlin、Jetpack Compose（已建立） |
-| 图像输入 | CameraX / Android 相册（计划） |
-| 图像处理 | OpenCV Android SDK、Kotlin（计划） |
-| 数据形式 | Bitmap / OpenCV Mat（计划） |
-| 部署 | Android 本地运行；不使用图像处理云服务（计划） |
+| 图像输入 | CameraX / Android Photo Picker（已接入） |
+| 图像处理 | Kotlin 像素处理核心（已接入）；当前未使用 OpenCV |
+| 数据形式 | Bitmap / PixelImage / SQLite 元数据（已接入） |
+| 部署 | Android 本地运行；不上传图片到云服务 |
 
 ```text
 CameraX / Gallery
@@ -112,7 +129,7 @@ CameraX / Gallery
 ### 开发环境
 
 - Android Studio：能够打开并构建本仓库 Android Gradle 工程
-- Android SDK：当前项目设置为 `minSdk = 29`、`compileSdk = 37`、`targetSdk = 37`
+- Android SDK：当前项目设置为 `minSdk = 29`、`compileSdk = 36`、`targetSdk = 36`
 - Gradle JDK：使用 Android Studio 为当前 Gradle 工程配置的兼容 JDK
 
 ### 获取源码并构建
@@ -137,6 +154,39 @@ macOS / Linux：
 ```
 
 成功构建后 Debug APK 通常位于 `app/build/outputs/apk/debug/`。**构建成功不等于真机、摄像头、图像算法已经通过测试。**
+
+
+## Android 原生迁移进度
+
+原生端独立运行于 `app/`，与 `web/` 是两个客户端。**Android 不使用 WebView，不把 HTML 页面套壳。**
+
+| 已落地模块 | 实现 |
+|---|---|
+| 页面 | 首页、低照度增强、图像复原、图片库、处理记录、我的 |
+| 图片输入 | Android Photo Picker、CameraX 应用内相机 |
+| 图像处理 | 纯 Kotlin 像素缓冲区；在 `Dispatchers.Default` 后台执行 |
+| 算法 | 曝光/阴影/高光、Gamma、直方图均衡、CLAHE、RGB 曲线、HSL、白平衡、高斯/中值/双边明度降噪及色度平滑 |
+| 交互 | 图片固定预览、长按原图、拖动分屏比较、五类专业参数面板及曲线编辑 |
+| 分析 | 平均亮度、暗部比例、亮度直方图、处理步骤和耗时 |
+| 本地数据 | SQLite 图片库、原始图片独立副本、收藏与搜索；最近 20 条处理记录及参数 JSON |
+| 导出 | 保存到系统相册 `Pictures/NightVision` |
+
+### 尚未实现（不得在演示或报告中写成已完成）
+
+- Retinex、同态滤波、独立低通/高通频域处理、非局部均值去噪。
+- 运动模糊 PSF 建模、维纳反卷积。
+- 严格的 HSV/YCbCr 可切换色彩空间实现。
+- 同场景配准参考图的 PSNR/SSIM、ROI 对比和频谱分析页面。
+
+### 构建与验证
+
+在 Android Studio 打开仓库根目录，执行：
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
+```
+
+GitHub Actions 在 `feat/android-native` 分支推送时执行单元测试和 Debug APK 构建，并保存 APK artifact。CI 通过不等于完成真机相机权限、不同厂商设备、长图内存和触摸交互验收。
 
 ## 🔬 算法与实验
 
@@ -165,12 +215,16 @@ macOS / Linux：
 
 ## 🗺️ 开发里程碑
 
-- [x] **S0-1**：创建 Android 项目并通过本地 Debug 构建
-- [ ] **S0-2**：README、代码管理规范、真机启动检查
-- [ ] **S1**：基础图像输入、噪声模拟 / 滤波、空间域增强
-- [ ] **S2**：频域增强、运动模糊复原、色彩空间与白平衡
-- [ ] **S3**：自动策略、算法过程可视化、效果评价
-- [ ] **S4**：性能与鲁棒性测试、实验报告、答辩
+- [x] **S0-1**：创建 Android 工程并通过 Debug 构建
+- [x] **S0-2**：README、独立开发分支、GitHub Actions 构建流程
+- [x] **S1-1**：原生首页/编辑/记录页面、系统照片选择器与相机入口
+- [x] **S1-2**：Kotlin 像素处理、亮度/对比度/色彩调节、高斯/中值滤波
+- [x] **S1-3**：原图切换、拖动对比、直方图、本地记录与相册导出
+- [ ] **S1-4**：EXIF 方向适配、参考图 PSNR/SSIM、ROI 与频谱观察
+- [x] **S2-1**：CLAHE、HSL/曲线与双边滤波原生算法及单元测试
+- [ ] **S2-2**：同态滤波、运动模糊 PSF 与维纳复原
+- [ ] **S3**：跨设备性能/鲁棒性测试、算法对照实验与质量评价
+- [ ] **S4**：实验报告、演示视频与答辩材料
 
 ## 📄 开源与使用说明
 
@@ -181,3 +235,4 @@ macOS / Linux：
 ---
 
 <div align="center"><sub>NightVision-DIP · Build it. Measure it. Understand it.</sub></div>
+
