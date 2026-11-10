@@ -190,6 +190,7 @@ class MainActivity : ComponentActivity() {
                     ActivityResultContracts.PickVisualMedia()
                 ) { uri ->
                     if (uri != null) scope.launch {
+                        clearQualityReference()
                         try {
                             val reference = withContext(Dispatchers.IO) { decodeImage(uri) }
                             qualityReference = reference
