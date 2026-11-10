@@ -302,7 +302,8 @@ object ImageProcessor {
                     "Wiener 频域运动模糊复原",
                     "线性运动 PSF：长度 " + String.format("%.1f", p.motionLengthPx) +
                         " px，方向 " + String.format("%.1f", p.motionAngleDegrees) +
-                        "°，K=" + String.format("%.3f", p.wienerRegularization) +
+                        "°，工作 PSF " + String.format("%.2f", motionResult.effectiveMotionLength) +
+                        " px，K=" + String.format("%.3f", p.wienerRegularization) +
                         "，强度 " + p.motionStrength.toInt() + "%；工作分辨率 " +
                         motionResult.workingWidth + "×" + motionResult.workingHeight +
                         "，FFT " + motionResult.fftWidth + "×" + motionResult.fftHeight
