@@ -6,8 +6,8 @@
 
 每次候选提交需提供 GitHub Actions 运行链接与提交 SHA。
 
-- [ ] \`./gradlew :app:testDebugUnitTest\` 成功。
-- [ ] \`./gradlew :app:assembleDebug\` 成功，并能下载对应 APK。
+- [ ] `./gradlew :app:testDebugUnitTest` 成功。
+- [ ] `./gradlew :app:assembleDebug` 成功，并能下载对应 APK。
 - [ ] 单元测试覆盖中性参数不改原图、透明度、自动参数、曝光、阴影、HSL、RGB 曲线、直方图均衡、CLAHE 极端网格与平坦区域、Gaussian/Median/Bilateral 明度降噪、白平衡开关。
 - [ ] 不使用未经过 Android SDK 支持的 OpenCV/AI 算法冒充已完成算法。
 
