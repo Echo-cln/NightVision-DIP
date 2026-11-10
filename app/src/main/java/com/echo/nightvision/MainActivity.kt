@@ -26,6 +26,8 @@ import com.echo.nightvision.data.ImageLibraryStore
 import com.echo.nightvision.data.encodeProcessParameters
 import com.echo.nightvision.data.decodeProcessParameters
 import com.echo.nightvision.processing.ImageProcessor
+import com.echo.nightvision.processing.ImageQualityEvaluator
+import com.echo.nightvision.processing.QualityComparison
 import com.echo.nightvision.processing.PixelImage
 import com.echo.nightvision.processing.ProcessParameters
 import com.echo.nightvision.processing.ProcessingMode
@@ -72,9 +74,74 @@ class MainActivity : ComponentActivity() {
                 var viewMode by remember { mutableStateOf(ImageViewMode.RESULT) }
                 var split by remember { mutableStateOf(0.5f) }
                 var message by remember { mutableStateOf<String?>(null) }
+                var qualityReference by remember { mutableStateOf<PixelImage?>(null) }
+                var qualityReferenceName by remember { mutableStateOf<String?>(null) }
+                var qualityComparison by remember { mutableStateOf<QualityComparison?>(null) }
+                var qualityError by remember { mutableStateOf<String?>(null) }
+                var qualityBusy by remember { mutableStateOf(false) }
+                var qualityVersion by remember { mutableStateOf(0) }
                 var previewJob by remember { mutableStateOf<Job?>(null) }
                 var previewVersion by remember { mutableStateOf(0) }
                 val scope = rememberCoroutineScope()
+
+                fun clearQualityReference() {
+                    qualityVersion += 1
+                    qualityReference = null
+                    qualityReferenceName = null
+                    qualityComparison = null
+                    qualityError = null
+                    qualityBusy = false
+                }
+
+                suspend fun refreshQuality(
+                    reference: PixelImage?,
+                    original: PixelImage?,
+                    processed: PixelImage?
+                ) {
+                    val version = qualityVersion + 1
+                    qualityVersion = version
+                    if (reference == null) {
+                        qualityComparison = null
+                        qualityError = null
+                        qualityBusy = false
+                        return
+                    }
+                    if (original == null) {
+                        qualityComparison = null
+                        qualityError = "请先打开待处理图片。"
+                        qualityBusy = false
+                        return
+                    }
+                    if (reference.width != original.width || reference.height != original.height) {
+                        qualityComparison = null
+                        qualityError = "参考图为 " + reference.width + "×" + reference.height +
+                            "，当前图为 " + original.width + "×" + original.height +
+                            "。PSNR/SSIM 要求同尺寸且像素对齐；请选取对应的清晰参考图。"
+                        qualityBusy = false
+                        return
+                    }
+                    qualityBusy = true
+                    qualityError = null
+                    try {
+                        val comparison = withContext(Dispatchers.Default) {
+                            QualityComparison(
+                                before = ImageQualityEvaluator.evaluate(reference, original),
+                                after = processed?.let { ImageQualityEvaluator.evaluate(reference, it) }
+                            )
+                        }
+                        if (version == qualityVersion) {
+                            qualityComparison = comparison
+                            qualityError = null
+                        }
+                    } catch (error: Exception) {
+                        if (version == qualityVersion) {
+                            qualityComparison = null
+                            qualityError = error.message ?: "质量评价计算失败。"
+                        }
+                    } finally {
+                        if (version == qualityVersion) qualityBusy = false
+                    }
+                }
 
                 fun loadImage(uri: Uri, sourceType: String = "导入图片") {
                     scope.launch {
@@ -89,6 +156,7 @@ class MainActivity : ComponentActivity() {
                             }
                             assets = listOf(asset) + assets.filterNot { it.id == asset.id }
                             libraryStorageBytes = withContext(Dispatchers.IO) { ImageLibraryStore.storageBytes(this@MainActivity) }
+                            clearQualityReference()
                             currentAssetPath = asset.imagePath
                             source = image
                             params = if (autoProcessOnImport) ProcessParameters() else ProcessParameters(auto = false)
@@ -118,6 +186,23 @@ class MainActivity : ComponentActivity() {
                     ActivityResultContracts.PickVisualMedia()
                 ) { uri -> if (uri != null) loadImage(uri) }
 
+                val referencePicker = rememberLauncherForActivityResult(
+                    ActivityResultContracts.PickVisualMedia()
+                ) { uri ->
+                    if (uri != null) scope.launch {
+                        try {
+                            val reference = withContext(Dispatchers.IO) { decodeImage(uri) }
+                            qualityReference = reference
+                            qualityReferenceName = importedImageName(uri)
+                            refreshQuality(reference, source, result)
+                        } catch (error: Exception) {
+                            qualityComparison = null
+                            qualityError = error.message ?: "参考图读取失败。"
+                            qualityBusy = false
+                        }
+                    }
+                }
+
                 LaunchedEffect(Unit) {
                     history = withContext(Dispatchers.IO) { HistoryStore.list(this@MainActivity) }
                     assets = withContext(Dispatchers.IO) { ImageLibraryStore.list(this@MainActivity) }
@@ -142,6 +227,12 @@ class MainActivity : ComponentActivity() {
                     viewMode = viewMode,
                     split = split,
                     message = message,
+                    qualityReferenceName = qualityReferenceName,
+                    qualityComparison = qualityComparison,
+                    qualityError = qualityError,
+                    qualityBusy = qualityBusy,
+                    onPickReference = { referencePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onClearReference = { clearQualityReference() },
                     onTheme = {
                         theme = it
                         getSharedPreferences("nightvision_settings", MODE_PRIVATE)
@@ -174,6 +265,7 @@ class MainActivity : ComponentActivity() {
                                     result = processed.image
                                     report = processed.report
                                     viewMode = ImageViewMode.RESULT
+                                    refreshQuality(qualityReference, input, processed.image)
                                 }
                             }
                         }
@@ -197,6 +289,7 @@ class MainActivity : ComponentActivity() {
                                     result = processed.image
                                     report = processed.report
                                     viewMode = ImageViewMode.RESULT
+                                    refreshQuality(qualityReference, input, processed.image)
                                     message = "处理完成。原图保持独立，结果可单独导出或保存记录。"
                                 } catch (error: Exception) {
                                     message = error.message ?: "图像处理失败，请重试。"
@@ -242,6 +335,7 @@ class MainActivity : ComponentActivity() {
                                     if (version == previewVersion) {
                                         result = full.image
                                         report = full.report
+                                        refreshQuality(qualityReference, input, full.image)
                                     }
                                 } catch (_: kotlinx.coroutines.CancellationException) {
                                     // A newer slider value superseded this preview.
@@ -311,6 +405,7 @@ class MainActivity : ComponentActivity() {
                             try {
                                 val image = withContext(Dispatchers.IO) { ImageLibraryStore.load(asset) }
                                 if (image != null) {
+                                    clearQualityReference()
                                     currentAssetPath = asset.imagePath
                                     source = image
                                     mode = ProcessingMode.ENHANCE
@@ -321,6 +416,7 @@ class MainActivity : ComponentActivity() {
                                     result = processed.image
                                     report = processed.report
                                     viewMode = ImageViewMode.RESULT
+                                    refreshQuality(null, image, processed.image)
                                     screen = AppScreen.EDITOR
                                     message = "已从图片库打开原图，并自动生成增强预览。"
                                 } else {
@@ -352,6 +448,7 @@ class MainActivity : ComponentActivity() {
                             try {
                                 val pair = withContext(Dispatchers.IO) { HistoryStore.load(item) }
                                 if (pair != null) {
+                                    clearQualityReference()
                                     currentAssetPath = item.originalPath
                                     source = pair.first
                                     result = pair.second
