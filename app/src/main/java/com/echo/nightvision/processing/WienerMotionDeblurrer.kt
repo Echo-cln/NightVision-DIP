@@ -287,7 +287,7 @@ object WienerMotionDeblurrer {
     )
 
     private fun luma(red: Int, green: Int, blue: Int): Double =
-        0.299 * red + 0.587 * green + 0.114 * blue
+        0.2126 * red + 0.7152 * green + 0.0722 * blue
 
     private fun reflectIndex(index: Int, size: Int): Int {
         if (size <= 1) return 0
