@@ -66,8 +66,9 @@ object HistoryStore {
         val previous = list(context)
         val retained = (listOf(item) + previous).take(LIMIT)
         val keep = retained.map { it.id }.toSet()
+        try { persist(context, retained) }
+        catch (error: Exception) { removeFiles(item); throw error }
         previous.filter { it.id !in keep }.forEach(::removeFiles)
-        persist(context, retained)
         return item
     }
 
@@ -92,13 +93,14 @@ object HistoryStore {
 
     fun delete(context: Context, id: String) {
         val current = list(context)
-        current.firstOrNull { it.id == id }?.let(::removeFiles)
         persist(context, current.filterNot { it.id == id })
+        current.firstOrNull { it.id == id }?.let(::removeFiles)
     }
 
     fun clear(context: Context) {
-        list(context).forEach(::removeFiles)
+        val previous = list(context)
         persist(context, emptyList())
+        previous.forEach(::removeFiles)
     }
 
     private fun pixels(bitmap: Bitmap): PixelImage {
@@ -133,6 +135,6 @@ object HistoryStore {
                 .put("timestamp", item.timestamp).put("originalPath", item.originalPath)
                 .put("resultPath", item.resultPath).put("summary", item.summary).put("parametersJson", item.parametersJson))
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).commit()) { "记录索引写入失败" }
     }
 }

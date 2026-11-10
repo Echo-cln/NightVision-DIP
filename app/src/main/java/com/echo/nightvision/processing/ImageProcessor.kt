@@ -31,7 +31,7 @@ data class ToneCurve(
 
 data class PixelImage(val width: Int, val height: Int, val pixels: IntArray) {
     init {
-        require(width > 0 && height > 0 && pixels.size == width * height) { "图像尺寸与像素数量不匹配" }
+        require(width > 0 && height > 0 && pixels.size.toLong() == width.toLong() * height.toLong()) { "图像尺寸与像素数量不匹配" }
     }
 }
 
@@ -75,7 +75,10 @@ data class ProcessParameters(
     val claheTiles: Int = 8,
     val whiteBalance: Boolean = false,
     val hslAdjustments: List<HslAdjustment> = defaultHslAdjustments(),
-    val toneCurve: ToneCurve = ToneCurve()
+    val toneCurve: ToneCurve = ToneCurve(),
+    val luminanceSpace: LuminanceSpace = LuminanceSpace.YCBCR,
+    val claheStrength: Float = 100f,
+    val protectBlack: Boolean = false
 )
 
 data class ImageStats(
@@ -87,7 +90,8 @@ data class ImageStats(
     val highlightPercent: Int,
     val histogram: List<Int>,
     val channelMeans: List<Double>,
-    val residualReference: Double?
+    val residualReference: Double?,
+    val quality: QualitySignals = QualitySignals()
 )
 
 data class ProcessingStep(val name: String, val detail: String)
@@ -133,14 +137,20 @@ object ImageProcessor {
             image.width, image.height, mean, deviation,
             (dark * 100.0 / count).toInt(),
             (highlights * 100.0 / count).toInt(),
-            histogram.toList(), channels.map { it / count }, flatResidual(image)
+            histogram.toList(), channels.map { it / count }, flatResidual(image), EnhancementPolicy.inspect(image)
         )
+    }
+
+    fun recommend(source: PixelImage, mode: ProcessingMode): ProcessParameters {
+        val stats = analyze(source)
+        return if (mode == ProcessingMode.ENHANCE) EnhancementPolicy.parameters(stats) else autoParameters(stats, mode)
     }
 
     fun process(source: PixelImage, mode: ProcessingMode, requested: ProcessParameters): ProcessResult {
         val started = System.nanoTime()
         val before = analyze(source)
-        val p = if (requested.auto) autoParameters(before, mode) else requested
+        val p = if (requested.auto && mode == ProcessingMode.ENHANCE) EnhancementPolicy.parameters(before)
+            else if (requested.auto) autoParameters(before, mode) else requested
         val output = source.pixels.copyOf()
         var processingSource = source
         val motionResult = if (mode == ProcessingMode.RESTORE && p.motionDeblurEnabled) {
@@ -170,9 +180,9 @@ object ImageProcessor {
         val localLumaTexture = if (p.texture != 0f) localMeanLuma(filtered, 1) else null
         val sharpenRadius = p.sharpenRadius.roundToInt().coerceIn(1, 3)
         val localLumaSharpen = if (p.sharpening != 0f) localMeanLuma(filtered, sharpenRadius) else null
-        val histogramLut = if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) histogramLut(filtered) else null
+        val histogramLut = if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) histogramLut(filtered, p.luminanceSpace) else null
         val claheMap = if (p.toneMethod == ToneMethod.CLAHE)
-            claheLuma(filtered, p.claheClipLimit, p.claheTiles) else null
+            claheLuma(filtered, p.claheClipLimit, p.claheTiles, p.luminanceSpace) else null
         val channelAverage = before.channelMeans.average()
         val wb = before.channelMeans.map { (channelAverage / max(1.0, it)).coerceIn(0.75, 1.3) }
         val gamma = p.gamma.coerceIn(0.2f, 3.0f).toDouble()
@@ -183,14 +193,17 @@ object ImageProcessor {
             if (it.size == 8) it else it + List(8 - it.size) { HslAdjustment() }
         }
 
+        val hasHslAdjustments = adjustments.any { it.hue != 0f || it.saturation != 0f || it.luminance != 0f }
         for (index in output.indices) {
             val pixel = output[index]
             var r = ((pixel ushr 16) and 255).toDouble()
             var g = ((pixel ushr 8) and 255).toDouble()
             var b = (pixel and 255).toDouble()
-            val originalY = luma(r, g, b)
-            var y = claheMap?.get(index)?.toDouble()
-                ?: histogramLut?.get(originalY.toInt().coerceIn(0, 255))?.toDouble()
+            val originalY = channelValue(pixel, p.luminanceSpace)
+            val localY = claheMap?.get(index)?.toDouble()
+            var y = localY?.let { originalY + (it - originalY) * p.claheStrength.coerceIn(0f, 100f) / 100.0 *
+                (if (p.protectBlack) smoothstep(0.0, 12.0, originalY) else 1.0) }
+                ?: histogramLut?.get(originalY.roundToInt().coerceIn(0, 255))?.toDouble()
                 ?: originalY
 
             y *= exposureGain
@@ -210,7 +223,12 @@ object ImageProcessor {
             y += p.curveMidtones.coerceIn(-100f, 100f) * 0.24 * midMask
             y += p.curveHighlights.coerceIn(-100f, 100f) * 0.28 * highlightMask
 
-            y = 255.0 * (y / 255.0).coerceIn(0.0, 1.0).pow(gamma)
+            val gammaInput = (y / 255.0).coerceIn(0.0, 1.0)
+            val gammaOutput = gammaInput.pow(gamma)
+            // Smooth toe avoids turning adjacent near-black JPEG codes into
+            // large steps when a severely underexposed image is lifted.
+            val toe = if (p.protectBlack && gamma < 1.0) smoothstep(0.0, 0.06, gammaInput) else 1.0
+            y = 255.0 * (gammaInput + (gammaOutput - gammaInput) * toe)
             y = (y - 128.0) * gain + 128.0
 
             val clarityResidual = if (localLumaClarity != null) originalY - localLumaClarity[index] else 0.0
@@ -223,10 +241,10 @@ object ImageProcessor {
             y += textureResidual * p.texture.coerceIn(-100f, 100f) / 100.0 * 0.30
             y += sharpenResidual * p.sharpening.coerceIn(0f, 150f) / 100.0 * detailFactor * 0.85 * sharpenMask
 
-            val tonalDelta = y - originalY
-            r += tonalDelta
-            g += tonalDelta
-            b += tonalDelta
+            val mapped = replaceChannel(pixel, y, p.luminanceSpace)
+            r = ((mapped ushr 16) and 255).toDouble()
+            g = ((mapped ushr 8) and 255).toDouble()
+            b = (mapped and 255).toDouble()
 
             if (p.whiteBalance) {
                 r *= 1.0 + (wb[0] - 1.0) * 0.7
@@ -250,7 +268,7 @@ object ImageProcessor {
             g = luminance + (g - luminance) * saturationFactor
             b = luminance + (b - luminance) * saturationFactor
 
-            if (adjustments.any { it.hue != 0f || it.saturation != 0f || it.luminance != 0f }) {
+            if (hasHslAdjustments) {
                 val hsl = rgbToHsl(r, g, b)
                 var hue = hsl[0]
                 var sat = hsl[1]
@@ -276,27 +294,28 @@ object ImageProcessor {
             g = applyCurve(g, p.toneCurve.green)
             b = applyCurve(b, p.toneCurve.blue)
 
-            val x = index % source.width
-            val row = index / source.width
-            val dx = (x.toDouble() / max(1, source.width - 1) - 0.5) * 2.0
-            val dy = (row.toDouble() / max(1, source.height - 1) - 0.5) * 2.0
-            val radius = sqrt(dx * dx + dy * dy) / sqrt(2.0)
-            val edge = smoothstep(0.25, 1.0, radius)
-            val vignetteFactor = 1.0 + p.vignette.coerceIn(-100f, 100f) / 100.0 * edge * 0.42
-            r *= vignetteFactor
-            g *= vignetteFactor
-            b *= vignetteFactor
+            if (p.vignette != 0f) {
+                val x = index % source.width
+                val row = index / source.width
+                val dx = (x.toDouble() / max(1, source.width - 1) - 0.5) * 2.0
+                val dy = (row.toDouble() / max(1, source.height - 1) - 0.5) * 2.0
+                val radius = sqrt(dx * dx + dy * dy) / sqrt(2.0)
+                val edge = smoothstep(0.25, 1.0, radius)
+                val factor = 1.0 + p.vignette.coerceIn(-100f, 100f) / 100.0 * edge * 0.42
+                r *= factor; g *= factor; b *= factor
+            }
 
             output[index] = (pixel and -0x1000000) or
-                (r.toInt().coerceIn(0, 255) shl 16) or
-                (g.toInt().coerceIn(0, 255) shl 8) or
-                b.toInt().coerceIn(0, 255)
+                (r.roundToInt().coerceIn(0, 255) shl 16) or
+                (g.roundToInt().coerceIn(0, 255) shl 8) or
+                b.roundToInt().coerceIn(0, 255)
         }
 
         val image = PixelImage(source.width, source.height, output)
         val after = analyze(image)
         val steps = buildList {
             add(ProcessingStep("图像亮度分析", "平均亮度 " + before.mean.toInt() + "/255，暗部 " + before.darkPercent + "%"))
+            if (requested.auto && mode == ProcessingMode.ENHANCE) add(ProcessingStep("自适应策略", EnhancementPolicy.explanation(before, p)))
             if (motionResult?.applied == true) {
                 add(ProcessingStep(
                     "Wiener 频域运动模糊复原",
@@ -317,15 +336,6 @@ object ImageProcessor {
             } else if (mode == ProcessingMode.RESTORE) {
                 add(ProcessingStep("Wiener 运动模糊复原未启用", "请切换手动精修并启用 Wiener，指定运动长度与方向"))
             }
-            if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) {
-                add(ProcessingStep("亮度直方图均衡化", "基于灰度累计分布进行全局映射"))
-            } else if (p.toneMethod == ToneMethod.CLAHE) {
-                add(ProcessingStep("CLAHE 局部对比度增强",
-                    "Clip Limit " + p.claheClipLimit.coerceIn(0.5f, 8f) +
-                        "，网格 " + p.claheTiles.coerceIn(2, 16) + "×" + p.claheTiles.coerceIn(2, 16)))
-            } else {
-                add(ProcessingStep("Gamma 与曝光校正", "曝光 " + String.format("%.2f", p.exposure) + " EV，Gamma γ = " + String.format("%.2f", gamma)))
-            }
             if (p.denoise > 0f) add(ProcessingStep(
                 when (p.denoiseMethod) {
                     DenoiseMethod.MEAN -> "3×3 明度均值滤波"
@@ -338,6 +348,17 @@ object ImageProcessor {
                         "，σs=" + p.bilateralSpatialSigma + "，σr=" + p.bilateralRangeSigma else ""
             ))
             if (p.colorDenoise > 0f) add(ProcessingStep("色度降噪", "YCbCr 色度平滑强度 " + p.colorDenoise.toInt() + "%"))
+            add(ProcessingStep("亮度通道", p.luminanceSpace.label + "，处理亮度后重建彩色；越界时等比压缩色度"))
+            if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) {
+                add(ProcessingStep("亮度直方图均衡化", "基于灰度累计分布进行全局映射"))
+            } else if (p.toneMethod == ToneMethod.CLAHE) {
+                add(ProcessingStep("CLAHE 局部对比度增强",
+                    "Clip Limit " + p.claheClipLimit.coerceIn(0.5f, 8f) +
+                        "，网格 " + p.claheTiles.coerceIn(2, 16) + "×" + p.claheTiles.coerceIn(2, 16)))
+            }
+            run {
+                add(ProcessingStep("Gamma 与曝光校正", "曝光 " + String.format("%.2f", p.exposure) + " EV，Gamma γ = " + String.format("%.2f", gamma)))
+            }
             if (p.shadows != 0f || p.highlights != 0f || p.whites != 0f || p.blacks != 0f) {
                 add(ProcessingStep("分区影调调整", "阴影、高光、白色色阶与黑色色阶独立映射"))
             }
@@ -390,7 +411,7 @@ object ImageProcessor {
      * Tile mappings are bilinearly interpolated to avoid block seams.
      * Unlike a cosmetic slider, this computes actual local tone mappings.
      */
-    private fun claheLuma(image: PixelImage, clipLimit: Float, requestedTiles: Int): FloatArray {
+    private fun claheLuma(image: PixelImage, clipLimit: Float, requestedTiles: Int, space: LuminanceSpace): FloatArray {
         val width = image.width
         val height = image.height
         val cols = requestedTiles.coerceIn(2, 16).coerceAtMost(width)
@@ -401,7 +422,7 @@ object ImageProcessor {
             val r = (px ushr 16) and 255
             val g = (px ushr 8) and 255
             val b = px and 255
-            bins[i] = luma(r.toDouble(), g.toDouble(), b.toDouble()).toInt().coerceIn(0, 255)
+            bins[i] = channelValue(px, space).roundToInt().coerceIn(0, 255)
         }
         val maps = Array(cols * rows) { FloatArray(256) }
         for (ty in 0 until rows) {
@@ -471,15 +492,11 @@ object ImageProcessor {
         return result
     }
 
-    private fun histogramLut(source: PixelImage): IntArray {
+    private fun histogramLut(source: PixelImage, space: LuminanceSpace): IntArray {
         val histogram = IntArray(256)
         source.pixels.forEach { pixel ->
-            val y = luma(
-                ((pixel ushr 16) and 255).toDouble(),
-                ((pixel ushr 8) and 255).toDouble(),
-                (pixel and 255).toDouble()
-            )
-            histogram[y.toInt().coerceIn(0, 255)]++
+            val y = channelValue(pixel, space)
+            histogram[y.roundToInt().coerceIn(0, 255)]++
         }
         val first = histogram.indexOfFirst { it > 0 }.coerceAtLeast(0)
         val cdfMin = histogram[first]
@@ -636,22 +653,19 @@ object ImageProcessor {
             val g = yy - 0.344136 * (nextCb - 128.0) - 0.714136 * (nextCr - 128.0)
             val b = yy + 1.772 * (nextCb - 128.0)
             output[index] = (pixel and -0x1000000) or
-                (r.toInt().coerceIn(0, 255) shl 16) or
-                (g.toInt().coerceIn(0, 255) shl 8) or b.toInt().coerceIn(0, 255)
+                (r.roundToInt().coerceIn(0, 255) shl 16) or
+                (g.roundToInt().coerceIn(0, 255) shl 8) or b.roundToInt().coerceIn(0, 255)
         }
     }
 
     private fun applyCurve(value: Double, points: List<Float>): Double {
         if (points.size != 5) return value.coerceIn(0.0, 255.0)
         val x = value.coerceIn(0.0, 255.0)
-        val inputAnchors = doubleArrayOf(0.0, 64.0, 128.0, 192.0, 255.0)
-        var segment = 0
-        while (segment < 3 && x > inputAnchors[segment + 1]) segment++
-        val fraction = ((x - inputAnchors[segment]) /
-            (inputAnchors[segment + 1] - inputAnchors[segment])).coerceIn(0.0, 1.0)
-        val a = points[segment].coerceIn(0f, 255f).toDouble()
-        val b = points[segment + 1].coerceIn(0f, 255f).toDouble()
-        return (a + (b - a) * fraction).coerceIn(0.0, 255.0)
+        val segment = minOf(3, (x / 64).toInt())
+        val start = segment * 64.0
+        val end = if (segment == 3) 255.0 else start + 64.0
+        val fraction = ((x - start) / (end - start)).coerceIn(0.0, 1.0)
+        return (points[segment] * (1.0 - fraction) + points[segment + 1] * fraction).coerceIn(0.0, 255.0)
     }
 
     private fun rgbToHsl(rValue: Double, gValue: Double, bValue: Double): DoubleArray {
@@ -705,7 +719,7 @@ object ImageProcessor {
         return t * t * (3.0 - 2.0 * t)
     }
 
-    private fun luma(r: Double, g: Double, b: Double): Double = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    private fun luma(r: Double, g: Double, b: Double): Double = 0.299 * r + 0.587 * g + 0.114 * b
 
     private fun flatResidual(image: PixelImage): Double? {
         if (image.width < 3 || image.height < 3) return null

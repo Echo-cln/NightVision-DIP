@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.echo.nightvision.processing.LuminanceSpace
 import com.echo.nightvision.processing.DenoiseMethod
 import com.echo.nightvision.processing.HslAdjustment
 import com.echo.nightvision.processing.ProcessParameters
@@ -91,7 +92,7 @@ fun ProfessionalAdjustmentPanel(
                                 clarity = 0f, texture = 0f, sharpening = 0f, sharpenRadius = 1f, sharpenDetail = 50f, sharpenMasking = 0f, denoise = 0f, denoiseDetail = 50f, colorDenoise = 0f, bilateralSpatialSigma = 1.2f, bilateralRangeSigma = 25f
                             )
                             AdjustmentGroup.EFFECTS -> parameters.copy(vignette = 0f)
-                            AdjustmentGroup.ALGORITHM -> parameters.copy(toneMethod = ToneMethod.GAMMA, claheClipLimit = 2f, claheTiles = 8, motionDeblurEnabled = false, motionLengthPx = 12f, motionAngleDegrees = 0f, wienerRegularization = 0.01f, motionStrength = 85f)
+                            AdjustmentGroup.ALGORITHM -> parameters.copy(toneMethod = ToneMethod.GAMMA, claheClipLimit = 2f, claheTiles = 8, claheStrength = 100f, luminanceSpace = LuminanceSpace.YCBCR, motionDeblurEnabled = false, motionLengthPx = 12f, motionAngleDegrees = 0f, wienerRegularization = 0.01f, motionStrength = 85f)
                         }
                     )
                 }) {
@@ -282,6 +283,13 @@ fun ProfessionalAdjustmentPanel(
                 }
 
                 AdjustmentGroup.ALGORITHM -> {
+                    Text("亮度通道", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LuminanceSpace.entries.forEach { space ->
+                            FilterChip(selected = parameters.luminanceSpace == space,
+                                onClick = { update(parameters.copy(luminanceSpace = space)) }, label = { Text(space.label) })
+                        }
+                    }
                     Text("当前可用的影调算法", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     FilterChip(
                         selected = parameters.toneMethod == ToneMethod.GAMMA,
@@ -299,6 +307,9 @@ fun ProfessionalAdjustmentPanel(
                         label = { Text("CLAHE 局部均衡") }
                     )
                     if (parameters.toneMethod == ToneMethod.CLAHE) {
+                        AdjustmentSlider("局部增强混合强度", parameters.claheStrength, 0f..100f, "%", accent) {
+                            update(parameters.copy(claheStrength = it))
+                        }
                         AdjustmentSlider("对比度裁剪阈值", parameters.claheClipLimit, 0.5f..8f, "", accent) {
                             update(parameters.copy(claheClipLimit = it))
                         }
@@ -342,17 +353,6 @@ fun ProfessionalAdjustmentPanel(
                                 color = Color(0xFF788A83), fontSize = 10.sp, lineHeight = 16.sp
                             )
                         }
-                    }
-                    HorizontalDivider(color = Color(0xFFE8EEEA))
-                    Text("其他算法研发中", color = Color(0xFF52665D), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                    Text(
-                        "Retinex、同态滤波和非局部均值尚未接入算法内核，因此当前不开放对应调节入口。",
-                        color = Color(0xFF788A83), fontSize = 10.sp, lineHeight = 16.sp
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("非局部均值 · 待接入") })
-                        FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("Retinex · 待接入") })
-                        FilterChip(selected = false, onClick = {}, enabled = false, label = { Text("同态滤波 · 待接入") })
                     }
                 }
             }
