@@ -40,7 +40,7 @@ object WienerMotionDeblurrer {
         regularization: Float,
         strength: Float
     ): WienerRestoreResult {
-        val requestedLength = motionLengthPx.coerceIn(2f, 64f)
+        val requestedLength = motionLengthPx.coerceIn(0.25f, 64f)
         val blend = strength.coerceIn(0f, 100f) / 100f
         val scale = min(1.0, MAX_WORKING_DIMENSION.toDouble() / max(source.width, source.height))
         val workWidth = max(1, (source.width * scale).roundToInt())
