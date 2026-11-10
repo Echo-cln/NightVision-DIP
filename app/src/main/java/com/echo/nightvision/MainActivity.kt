@@ -220,8 +220,16 @@ class MainActivity : ComponentActivity() {
                                     val previewInput = withContext(Dispatchers.Default) {
                                         resizeForPreview(input, 720)
                                     }
+                                    val previewParameters = if (
+                                        mode == ProcessingMode.RESTORE && next.motionDeblurEnabled
+                                    ) {
+                                        val fullResolutionScale = minOf(
+                                            1f, 896f / maxOf(input.width, input.height)
+                                        )
+                                        next.copy(motionLengthPx = next.motionLengthPx * fullResolutionScale)
+                                    } else next
                                     val preview = withContext(Dispatchers.Default) {
-                                        ImageProcessor.process(previewInput, mode, next)
+                                        ImageProcessor.process(previewInput, mode, previewParameters)
                                     }
                                     if (version != previewVersion) return@launch
                                     result = preview.image
