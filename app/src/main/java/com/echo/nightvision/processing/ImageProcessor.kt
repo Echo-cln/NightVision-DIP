@@ -9,7 +9,7 @@ import kotlin.math.sqrt
 
 enum class ProcessingMode { ENHANCE, RESTORE }
 enum class DenoiseMethod { GAUSSIAN, MEDIAN }
-enum class ToneMethod { GAMMA, HISTOGRAM_EQUALIZATION }
+enum class ToneMethod { GAMMA, HISTOGRAM_EQUALIZATION, CLAHE }
 
 data class HslAdjustment(
     val hue: Float = 0f,
@@ -63,6 +63,8 @@ data class ProcessParameters(
     val curveMidtones: Float = 0f,
     val curveHighlights: Float = 0f,
     val toneMethod: ToneMethod = ToneMethod.GAMMA,
+    val claheClipLimit: Float = 2f,
+    val claheTiles: Int = 8,
     val whiteBalance: Boolean = false,
     val hslAdjustments: List<HslAdjustment> = defaultHslAdjustments(),
     val toneCurve: ToneCurve = ToneCurve()
@@ -141,11 +143,14 @@ object ImageProcessor {
             denoiseChroma(source, output, p.colorDenoise.coerceIn(0f, 100f) / 100.0)
         }
 
-        val localLumaClarity = localMeanLuma(source, 2)
-        val localLumaTexture = localMeanLuma(source, 1)
+        val filtered = PixelImage(source.width, source.height, output)
+        val localLumaClarity = if (p.clarity != 0f) localMeanLuma(filtered, 2) else null
+        val localLumaTexture = if (p.texture != 0f) localMeanLuma(filtered, 1) else null
         val sharpenRadius = p.sharpenRadius.roundToInt().coerceIn(1, 3)
-        val localLumaSharpen = localMeanLuma(source, sharpenRadius)
-        val histogramLut = if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) histogramLut(source) else null
+        val localLumaSharpen = if (p.sharpening != 0f) localMeanLuma(filtered, sharpenRadius) else null
+        val histogramLut = if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) histogramLut(filtered) else null
+        val claheMap = if (p.toneMethod == ToneMethod.CLAHE)
+            claheLuma(filtered, p.claheClipLimit, p.claheTiles) else null
         val channelAverage = before.channelMeans.average()
         val wb = before.channelMeans.map { (channelAverage / max(1.0, it)).coerceIn(0.75, 1.3) }
         val gamma = p.gamma.coerceIn(0.2f, 3.0f).toDouble()
@@ -162,7 +167,9 @@ object ImageProcessor {
             var g = ((pixel ushr 8) and 255).toDouble()
             var b = (pixel and 255).toDouble()
             val originalY = luma(r, g, b)
-            var y = histogramLut?.get(originalY.toInt().coerceIn(0, 255))?.toDouble() ?: originalY
+            var y = claheMap?.get(index)?.toDouble()
+                ?: histogramLut?.get(originalY.toInt().coerceIn(0, 255))?.toDouble()
+                ?: originalY
 
             y *= exposureGain
             y += p.brightness.coerceIn(-100f, 100f) * 0.55
@@ -184,9 +191,9 @@ object ImageProcessor {
             y = 255.0 * (y / 255.0).coerceIn(0.0, 1.0).pow(gamma)
             y = (y - 128.0) * gain + 128.0
 
-            val clarityResidual = originalY - localLumaClarity[index]
-            val textureResidual = originalY - localLumaTexture[index]
-            val sharpenResidual = originalY - localLumaSharpen[index]
+            val clarityResidual = if (localLumaClarity != null) originalY - localLumaClarity[index] else 0.0
+            val textureResidual = if (localLumaTexture != null) originalY - localLumaTexture[index] else 0.0
+            val sharpenResidual = if (localLumaSharpen != null) originalY - localLumaSharpen[index] else 0.0
             val maskingThreshold = p.sharpenMasking.coerceIn(0f, 100f) / 100.0 * 32.0
             val sharpenMask = smoothstep(maskingThreshold, maskingThreshold + 12.0, abs(sharpenResidual))
             val detailFactor = 0.35 + p.sharpenDetail.coerceIn(0f, 100f) / 100.0 * 0.65
@@ -270,6 +277,10 @@ object ImageProcessor {
             add(ProcessingStep("图像亮度分析", "平均亮度 " + before.mean.toInt() + "/255，暗部 " + before.darkPercent + "%"))
             if (p.toneMethod == ToneMethod.HISTOGRAM_EQUALIZATION) {
                 add(ProcessingStep("亮度直方图均衡化", "基于灰度累计分布进行全局映射"))
+            } else if (p.toneMethod == ToneMethod.CLAHE) {
+                add(ProcessingStep("CLAHE 局部对比度增强",
+                    "Clip Limit " + p.claheClipLimit.coerceIn(0.5f, 8f) +
+                        "，网格 " + p.claheTiles.coerceIn(2, 16) + "×" + p.claheTiles.coerceIn(2, 16)))
             } else {
                 add(ProcessingStep("Gamma 与曝光校正", "曝光 " + String.format("%.2f", p.exposure) + " EV，Gamma γ = " + String.format("%.2f", gamma)))
             }
@@ -322,6 +333,86 @@ object ImageProcessor {
             gamma = 1f,
             whiteBalance = mode == ProcessingMode.RESTORE
         )
+    }
+
+    /**
+     * Contrast Limited Adaptive Histogram Equalization on the luminance channel.
+     * Each tile clips its 256-bin histogram and redistributes excess before CDF.
+     * Tile mappings are bilinearly interpolated to avoid block seams.
+     * Unlike a cosmetic slider, this computes actual local tone mappings.
+     */
+    private fun claheLuma(image: PixelImage, clipLimit: Float, requestedTiles: Int): FloatArray {
+        val width = image.width
+        val height = image.height
+        val cols = requestedTiles.coerceIn(2, 16).coerceAtMost(width)
+        val rows = requestedTiles.coerceIn(2, 16).coerceAtMost(height)
+        val bins = IntArray(width * height)
+        for (i in bins.indices) {
+            val px = image.pixels[i]
+            val r = (px ushr 16) and 255
+            val g = (px ushr 8) and 255
+            val b = px and 255
+            bins[i] = luma(r.toDouble(), g.toDouble(), b.toDouble()).toInt().coerceIn(0, 255)
+        }
+        val maps = Array(cols * rows) { FloatArray(256) }
+        for (ty in 0 until rows) {
+            val y0 = ty * height / rows
+            val y1 = (ty + 1) * height / rows
+            for (tx in 0 until cols) {
+                val x0 = tx * width / cols
+                val x1 = (tx + 1) * width / cols
+                val area = (x1 - x0) * (y1 - y0)
+                val histogram = IntArray(256)
+                for (y in y0 until y1) for (x in x0 until x1) histogram[bins[y * width + x]]++
+
+                val cap = max(1, (clipLimit.coerceIn(0.5f, 8f) * area / 256f).roundToInt())
+                var excess = 0
+                for (bin in histogram.indices) {
+                    if (histogram[bin] > cap) {
+                        excess += histogram[bin] - cap
+                        histogram[bin] = cap
+                    }
+                }
+                val distributed = excess / 256
+                val remainder = excess % 256
+                for (bin in histogram.indices) histogram[bin] += distributed
+                // Spread residual across the domain rather than piling it into dark bins.
+                for (k in 0 until remainder) histogram[(k * 131) % 256]++
+
+                val first = histogram.indexOfFirst { it > 0 }
+                val cdfMin = if (first < 0) 0 else histogram[first]
+                val map = maps[ty * cols + tx]
+                var cumulative = 0
+                for (bin in 0..255) {
+                    cumulative += histogram[bin]
+                    map[bin] = if (area == cdfMin) bin.toFloat() else
+                        (((cumulative - cdfMin).toFloat() / (area - cdfMin)) * 255f)
+                            .coerceIn(0f, 255f)
+                }
+            }
+        }
+        val result = FloatArray(width * height)
+        for (y in 0 until height) {
+            val fy = if (rows <= 1) 0f else ((y + 0.5f) * rows / height - 0.5f)
+            val yLow = kotlin.math.floor(fy).toInt().coerceIn(0, rows - 1)
+            val yHigh = (yLow + 1).coerceIn(0, rows - 1)
+            val wy = if (yLow == yHigh) 0f else (fy - yLow).coerceIn(0f, 1f)
+            for (x in 0 until width) {
+                val fx = if (cols <= 1) 0f else ((x + 0.5f) * cols / width - 0.5f)
+                val xLow = kotlin.math.floor(fx).toInt().coerceIn(0, cols - 1)
+                val xHigh = (xLow + 1).coerceIn(0, cols - 1)
+                val wx = if (xLow == xHigh) 0f else (fx - xLow).coerceIn(0f, 1f)
+                val i = y * width + x
+                val bin = bins[i]
+                val m00 = maps[yLow * cols + xLow][bin]
+                val m10 = maps[yLow * cols + xHigh][bin]
+                val m01 = maps[yHigh * cols + xLow][bin]
+                val m11 = maps[yHigh * cols + xHigh][bin]
+                result[i] = (m00 * (1f - wx) + m10 * wx) * (1f - wy) +
+                    (m01 * (1f - wx) + m11 * wx) * wy
+            }
+        }
+        return result
     }
 
     private fun histogramLut(source: PixelImage): IntArray {
